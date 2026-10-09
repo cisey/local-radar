@@ -121,6 +121,8 @@ Data files (pool, caches, output guides) are **not** committed to Git — they l
 
 The interface with English labels, language selector, and empty fields ready for input.
 
+![Local Radar GUI](screenshot-gui.png)
+
 ### Interactive Guide
 
 The generated HTML guide with map, day planner, and budget tracker.
