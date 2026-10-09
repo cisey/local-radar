@@ -67,6 +67,16 @@ Local Radar supports **Turkish** and **English**.
     playwright install chromium
     python local_radar_gui.py
 
+### Quick Launch (Windows)
+
+Double-click **`run.bat`** to launch the GUI without opening a terminal.
+
+The batch file automatically:
+- Changes to the project directory
+- Checks if Python is installed
+- Launches `local_radar_gui.py`
+- Keeps the window open if an error occurs
+
 ### First Scan
 
 1. Open the GUI
