@@ -1,7 +1,7 @@
 """
 Local Radar - GUI (v4.3)
 Double-click to launch. No terminal needed.
-Must be in the SAME folder as gezi_rehberi_v4.py.
+Must be in the SAME folder as local_radar_core.py.
 """
 import os, re, sys, json, time, queue, threading, webbrowser, pathlib, csv
 import traceback, datetime
@@ -9,13 +9,106 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
 
+# ═══════════════════════════════════════════════════════════
+# LANGUAGE / TRANSLATIONS
+# ═══════════════════════════════════════════════════════════
+METINLER = {
+    "tr": {
+        "baslik": "📡 Local Radar · v4.3",
+        "dil": "Dil:",
+        "il": "İl", "ilce": "İlçe", "mahalle": "Mahalle",
+        "mahalle_ipucu": "Tüm ilçe için boş bırakın. Virgülle ayırarak çoklu arama yapabilirsiniz (Örn: Karataş, Akkent)",
+        "yaricap": "Yarıçap (km)", "yaricap_ipucu": "Boş bırakırsanız sistem otomatik belirler",
+        "min_puan": "En az puan", "min_yorum": "En az yorum",
+        "ozel_arama": "Özel Arama", "ozel_arama_ipucu": "Listede olmayan bir şey aramak için",
+        "tarama_modu": "Tarama Modu:", "hucre_km": "Hücre boyutu (km):",
+        "kategoriler": "Kategoriler",
+        "yemek": "Yemek (Restoran, Kafe)", "gezi": "Gezilecek Yerler",
+        "alisveris": "Alışveriş (Market, Giyim)", "saglik": "Sağlık (Hastane, Eczane)",
+        "oto": "Oto & Ulaşım (Tamir, Lastik)", "konaklama": "Konaklama (Otel)",
+        "banka": "Banka & Kargo", "tumu": "TÜMÜNÜ ARA (DİKKAT: saatler sürebilir!)",
+        "mahalle_bul": "Yerlerin mahallesini bul", "goster": "Tarayıcı penceresini göster",
+        "izgara": "Yoğun yerleri otomatik parçala (kapsamlı)",
+        "ham_kullan": "Tarama yapma, son taramayı (ham veri) kullan",
+        "devam": "Yarım kalan taramaya devam et",
+        "hizli": "Hızlı mod (resim engelle, kısa bekleme)",
+        "tekrar": "Son 30 günde yapılan aramaları atla", "verimsiz": "Verimsiz kelimeleri atla",
+        "paralel": "Paralel:", "baslat": "Başlat", "durdur": "Durdur",
+        "havuz_sifirla": "Havuzu Sıfırla", "manuel_ekle": "Manuel Mekan Ekle",
+        "klasor_ac": "Klasörü Aç", "excel_ac": "Excel'i Aç", "json_btn": "JSON", "kml_btn": "KML",
+        "ilce_rehberi": "📍 İlçe Haritası", "hepsi_rehberi": "📡 HEPSİ (Local Radar)",
+        "kategori_esikleri": "Kategori Eşikleri...",
+        "profil_kaydet": "Ayarları Profile Kaydet", "profil_yukle": "Profil Yükle",
+        "sure": "Süre: –",
+        "hazir": "📡 Local Radar hazır. Çoklu ilçe taramalarında sonuçlar 'local_radar_all.html' dosyasında birikir.",
+        "ipucu": "İpucu: 'Tarama yapma' seçeneğiyle son taramayı saniyeler içinde farklı filtrelerle işleyebilirsiniz.",
+        "mod_ozel": "Özel Seçim",
+        "mod_hizli": "Hızlı (yemek ve gezi, tek parça)",
+        "mod_normal": "Normal (yemek ve gezi, ızgaralı)",
+        "mod_kapsamli": "Kapsamlı (her şey, ızgaralı)",
+        "mod_sabit": "Sabit ızgara (hücre boyutu km)",
+    },
+    "en": {
+        "baslik": "📡 Local Radar · v4.3",
+        "dil": "Language:",
+        "il": "City", "ilce": "District", "mahalle": "Neighborhood",
+        "mahalle_ipucu": "Leave empty for whole district. Separate with commas (e.g. Karataş, Akkent)",
+        "yaricap": "Radius (km)", "yaricap_ipucu": "Leave empty for auto-detection",
+        "min_puan": "Min rating", "min_yorum": "Min reviews",
+        "ozel_arama": "Custom search", "ozel_arama_ipucu": "Search for something not in the list",
+        "tarama_modu": "Scan mode:", "hucre_km": "Cell size (km):",
+        "kategoriler": "Categories",
+        "yemek": "Food (Restaurants, Cafes)", "gezi": "Attractions",
+        "alisveris": "Shopping (Market, Clothing)", "saglik": "Health (Hospital, Pharmacy)",
+        "oto": "Auto & Transport (Repair, Tires)", "konaklama": "Accommodation (Hotel)",
+        "banka": "Bank & Cargo", "tumu": "SCAN EVERYTHING (WARNING: may take hours!)",
+        "mahalle_bul": "Detect neighborhoods", "goster": "Show browser window",
+        "izgara": "Auto-split dense areas (comprehensive)",
+        "ham_kullan": "Skip scan, use last raw data",
+        "devam": "Resume incomplete scan",
+        "hizli": "Fast mode (block images, short waits)",
+        "tekrar": "Skip searches from last 30 days", "verimsiz": "Skip inefficient keywords",
+        "paralel": "Parallel:", "baslat": "Start", "durdur": "Stop",
+        "havuz_sifirla": "Reset Pool", "manuel_ekle": "Add Manual Place",
+        "klasor_ac": "Open Folder", "excel_ac": "Open Excel", "json_btn": "JSON", "kml_btn": "KML",
+        "ilce_rehberi": "📍 District Map", "hepsi_rehberi": "📡 ALL (Local Radar)",
+        "kategori_esikleri": "Category Thresholds...",
+        "profil_kaydet": "Save Settings as Profile", "profil_yukle": "Load Profile",
+        "sure": "Time: –",
+        "hazir": "📡 Local Radar ready. Multi-district scans accumulate in 'local_radar_all.html'.",
+        "ipucu": "Tip: Use 'Skip scan' to re-process the last scan with different filters in seconds.",
+        "mod_ozel": "Custom Selection",
+        "mod_hizli": "Fast (food + attractions, single pass)",
+        "mod_normal": "Normal (food + attractions, grid)",
+        "mod_kapsamli": "Comprehensive (everything, grid)",
+        "mod_sabit": "Fixed grid (cell size in km)",
+    }
+}
+
+_aktif_dil = "en"
+
+
+def dil_ayarla(dil):
+    global _aktif_dil
+    if dil in METINLER:
+        _aktif_dil = dil
+
+
+def dil_al():
+    return _aktif_dil
+
+
+def t(anahtar):
+    return METINLER.get(_aktif_dil, METINLER["tr"]).get(anahtar, anahtar)
+
+
 def sure_yaz(sn):
     sn = int(max(sn, 0))
     if sn >= 3600:
-        return f"{sn // 3600} sa {(sn % 3600) // 60} dk"
+        return f"{sn // 3600}h {(sn % 3600) // 60}m"
     if sn >= 60:
-        return f"{sn // 60} dk {sn % 60:02d} sn"
-    return f"{sn} sn"
+        return f"{sn // 60}m {sn % 60:02d}s"
+    return f"{sn}s"
 
 
 def hata_yaz(metin):
@@ -28,7 +121,7 @@ os.chdir(KLASOR)
 sys.path.insert(0, KLASOR)
 
 try:
-    import gezi_rehberi_v4 as g
+    import local_radar_core as g
 except Exception as e:
     hata_yaz(f"Module load error: {e}\n{traceback.format_exc()}")
 
@@ -125,7 +218,8 @@ ILLER = sorted(IL_ILCE.keys())
 class Pencere:
     def __init__(self, kok):
         self.kok = kok
-        kok.title("📡 Local Radar · v4.3")
+        self.dil = tk.StringVar(value=_aktif_dil)
+        kok.title(t("baslik"))
         kok.geometry("680x950")
         self.kuyruk = queue.Queue()
         self.durdur = threading.Event()
@@ -139,29 +233,57 @@ class Pencere:
         if 'g' in globals():
             g.LOG = lambda m: self.kuyruk.put(("log", str(m)))
 
+        # ⭐ Dil seçici (üstte, sağda)
+        dil_frame = ttk.Frame(kok)
+        dil_frame.pack(fill="x", padx=14, pady=(10, 0))
+        ttk.Label(dil_frame, text=t("dil")).pack(side="right", padx=(5, 0))
+        self.dil_kutu = ttk.Combobox(dil_frame, textvariable=self.dil,
+                                      values=["tr", "en"], state="readonly", width=5)
+        self.dil_kutu.pack(side="right")
+        self.dil_kutu.bind("<<ComboboxSelected>>", self.dil_degisti)
+
         f = ttk.Frame(kok, padding=14)
         f.pack(fill="both", expand=True)
         f.columnconfigure(1, weight=1)
 
-        def alan(satir, etiket, deger, ipucu="", degerler=None):
+        def alan(satir, etiket, deger, ipucu="", degerler=None, placeholder=""):
             ttk.Label(f, text=etiket).grid(row=satir, column=0, sticky="w", pady=3)
             v = tk.StringVar(value=deger)
             if degerler is not None:
                 kutu = ttk.Combobox(f, textvariable=v, values=degerler)
                 kutu.grid(row=satir, column=1, sticky="ew", pady=3, padx=(8, 0))
                 return v, kutu
-            ttk.Entry(f, textvariable=v).grid(row=satir, column=1, sticky="ew", pady=3, padx=(8, 0))
+            entry = ttk.Entry(f, textvariable=v)
+            entry.grid(row=satir, column=1, sticky="ew", pady=3, padx=(8, 0))
             if ipucu:
                 ttk.Label(f, text=ipucu, foreground="#666").grid(row=satir + 1, column=1, sticky="w", padx=(8, 0))
-            return v, None
+            # ⭐ Placeholder sistemi
+            if placeholder:
+                entry.insert(0, placeholder)
+                entry.configure(foreground="gray")
+                def on_focus_in(event):
+                    if entry.get() == placeholder:
+                        entry.delete(0, "end")
+                        entry.configure(foreground="black")
+                def on_focus_out(event):
+                    if not entry.get().strip():
+                        entry.insert(0, placeholder)
+                        entry.configure(foreground="gray")
+                entry.bind("<FocusIn>", on_focus_in)
+                entry.bind("<FocusOut>", on_focus_out)
+            return v, entry
 
-        self.il, self.il_kutu = alan(0, "İl", "Gaziantep", degerler=ILLER)
-        self.ilce, self.ilce_kutu = alan(2, "İlçe", "Şahinbey", degerler=[])
-        self.mahalle, _ = alan(4, "Mahalle", "", "Tüm ilçe için boş bırakın. Virgülle ayırarak çoklu arama yapabilirsiniz (Örn: Karataş, Akkent)")
-        self.yaricap, _ = alan(6, "Yarıçap (km)", "", "Boş bırakırsanız sistem otomatik belirler")
-        self.puan, _ = alan(8, "En az puan", "4.0")
-        self.oy, _ = alan(10, "En az yorum", "50")
-        self.ozel_arama, _ = alan(12, "Özel Arama", "", "Listede olmayan bir şey aramak için (Örn: Noter, Halı Saha)")
+        self.il, self.il_kutu = alan(0, t("il"), "", degerler=[""] + ILLER)
+        ttk.Label(f, text="Type the city name (e.g. Gaziantep) or select from list",
+                  foreground="#888", font=("Segoe UI", 8, "italic")).grid(row=1, column=1, sticky="w", padx=(8, 0))
+        self.ilce, self.ilce_kutu = alan(2, t("ilce"), "", degerler=[])
+        ttk.Label(f, text="Type the district name (e.g. Şahinbey) — list loads after city selection",
+                  foreground="#888", font=("Segoe UI", 8, "italic")).grid(row=3, column=1, sticky="w", padx=(8, 0))
+        self.mahalle, _ = alan(4, t("mahalle"), "", t("mahalle_ipucu"))
+        self.yaricap, _ = alan(6, t("yaricap"), "", t("yaricap_ipucu"))
+        self.puan, _ = alan(8, t("min_puan"), "4.0")
+        self.oy, _ = alan(10, t("min_yorum"), "50")
+        self.ozel_arama, _ = alan(12, t("ozel_arama"), "", t("ozel_arama_ipucu"))
 
         def ilce_doldur(*_):
             il = self.il.get().strip()
@@ -171,18 +293,12 @@ class Pencere:
 
         mod_frame = ttk.Frame(f)
         mod_frame.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(10, 0))
-        ttk.Label(mod_frame, text="Tarama Modu:").pack(side="left", padx=(0, 8))
-        self.mod_var = tk.StringVar(value="Özel Seçim")
+        ttk.Label(mod_frame, text=t("tarama_modu")).pack(side="left", padx=(0, 8))
+        self.mod_var = tk.StringVar(value=t("mod_ozel"))
         self.mod_kutu = ttk.Combobox(
             mod_frame,
             textvariable=self.mod_var,
-            values=[
-                "Özel Seçim",
-                "Hızlı (yemek ve gezi, tek parça)",
-                "Normal (yemek ve gezi, ızgaralı)",
-                "Kapsamlı (her şey, ızgaralı)",
-                "Sabit ızgara (hücre boyutu km)",
-            ],
+            values=[t("mod_ozel"), t("mod_hizli"), t("mod_normal"), t("mod_kapsamli"), t("mod_sabit")],
             state="readonly",
             width=34,
         )
@@ -191,7 +307,7 @@ class Pencere:
 
         self.sabit_izgara = tk.BooleanVar(value=False)
         self.hucre_km = tk.StringVar(value="1.0")
-        ttk.Label(mod_frame, text="  Hücre boyutu (km):").pack(side="left", padx=(10, 4))
+        ttk.Label(mod_frame, text="  " + t("hucre_km")).pack(side="left", padx=(10, 4))
         self.hucre_km_entry = ttk.Entry(mod_frame, textvariable=self.hucre_km, width=8, state="disabled")
         self.hucre_km_entry.pack(side="left")
 
@@ -207,16 +323,16 @@ class Pencere:
                             "banka": self.banka}
         self.tumu = tk.BooleanVar(value=False)
 
-        kat_frame = ttk.LabelFrame(f, text="Kategoriler")
+        kat_frame = ttk.LabelFrame(f, text=t("kategoriler"))
         kat_frame.grid(row=14, column=0, columnspan=2, sticky="ew", pady=(12, 8), ipadx=5, ipady=5)
 
-        ttk.Checkbutton(kat_frame, text="Yemek (Restoran, Kafe)", variable=self.yemek).grid(row=0, column=0, sticky="w", padx=5, pady=2)
-        ttk.Checkbutton(kat_frame, text="Gezilecek Yerler", variable=self.gezi).grid(row=0, column=1, sticky="w", padx=5, pady=2)
-        ttk.Checkbutton(kat_frame, text="Alışveriş (Market, Giyim)", variable=self.alisveris).grid(row=0, column=2, sticky="w", padx=5, pady=2)
-        ttk.Checkbutton(kat_frame, text="Sağlık (Hastane, Eczane)", variable=self.saglik).grid(row=1, column=0, sticky="w", padx=5, pady=2)
-        ttk.Checkbutton(kat_frame, text="Oto & Ulaşım (Tamir, Lastik)", variable=self.oto).grid(row=1, column=1, sticky="w", padx=5, pady=2)
-        ttk.Checkbutton(kat_frame, text="Konaklama (Otel)", variable=self.konaklama).grid(row=1, column=2, sticky="w", padx=5, pady=2)
-        ttk.Checkbutton(kat_frame, text="Banka & Kargo", variable=self.banka).grid(row=2, column=0, sticky="w", padx=5, pady=2)
+        ttk.Checkbutton(kat_frame, text=t("yemek"), variable=self.yemek).grid(row=0, column=0, sticky="w", padx=5, pady=2)
+        ttk.Checkbutton(kat_frame, text=t("gezi"), variable=self.gezi).grid(row=0, column=1, sticky="w", padx=5, pady=2)
+        ttk.Checkbutton(kat_frame, text=t("alisveris"), variable=self.alisveris).grid(row=0, column=2, sticky="w", padx=5, pady=2)
+        ttk.Checkbutton(kat_frame, text=t("saglik"), variable=self.saglik).grid(row=1, column=0, sticky="w", padx=5, pady=2)
+        ttk.Checkbutton(kat_frame, text=t("oto"), variable=self.oto).grid(row=1, column=1, sticky="w", padx=5, pady=2)
+        ttk.Checkbutton(kat_frame, text=t("konaklama"), variable=self.konaklama).grid(row=1, column=2, sticky="w", padx=5, pady=2)
+        ttk.Checkbutton(kat_frame, text=t("banka"), variable=self.banka).grid(row=2, column=0, sticky="w", padx=5, pady=2)
 
         tumu_satir = ttk.Frame(kat_frame)
         tumu_satir.grid(row=3, column=0, columnspan=3, sticky="w", padx=5, pady=(8, 2))
@@ -224,7 +340,7 @@ class Pencere:
         self.tumu_cb.pack(side="left")
         self.tumu_etiket = tk.Label(
             tumu_satir,
-            text="TÜMÜNÜ ARA (DİKKAT: saatler sürebilir!)",
+            text=t("tumu"),
             fg="red",
             font=("Segoe UI", 9, "bold"),
             cursor="hand2",
@@ -238,7 +354,7 @@ class Pencere:
                 self._tumu_guncelle = True
                 for v in self.kategoriler.values(): v.set(True)
                 self._tumu_guncelle = False
-                self.mod_var.set("Özel Seçim")
+                self.mod_var.set(t("mod_ozel"))
 
         def kategori_degisti(*_):
             if self._tumu_guncelle: return
@@ -247,7 +363,7 @@ class Pencere:
                 self._tumu_guncelle = True
                 self.tumu.set(False)
                 self._tumu_guncelle = False
-            self.mod_var.set("Özel Seçim")
+            self.mod_var.set(t("mod_ozel"))
 
         self.tumu.trace_add("write", tumu_degisti)
         for v in self.kategoriler.values():
@@ -259,18 +375,16 @@ class Pencere:
         self.goster = tk.BooleanVar(value=True)
         self.izgara = tk.BooleanVar(value=True)
         self.ham = tk.BooleanVar(value=False)
-        ttk.Checkbutton(ayar_frame, text="Yerlerin mahallesini bul", variable=self.mahalle_bul).pack(side="left", padx=(0, 12))
-        ttk.Checkbutton(ayar_frame, text="Tarayıcı penceresini göster", variable=self.goster).pack(side="left", padx=(0, 12))
-        ttk.Checkbutton(ayar_frame, text="Yoğun yerleri otomatik parçala (kapsamlı)", variable=self.izgara).pack(side="left")
+        ttk.Checkbutton(ayar_frame, text=t("mahalle_bul"), variable=self.mahalle_bul).pack(side="left", padx=(0, 12))
+        ttk.Checkbutton(ayar_frame, text=t("goster"), variable=self.goster).pack(side="left", padx=(0, 12))
+        ttk.Checkbutton(ayar_frame, text=t("izgara"), variable=self.izgara).pack(side="left")
 
         ayar_frame2 = ttk.Frame(f)
         ayar_frame2.grid(row=16, column=0, columnspan=2, sticky="w", pady=(2, 0))
-        ttk.Checkbutton(ayar_frame2, text="Tarama yapma, son taramayı (ham veri) kullan",
-                        variable=self.ham).pack(side="left")
+        ttk.Checkbutton(ayar_frame2, text=t("ham_kullan"), variable=self.ham).pack(side="left")
 
         self.devam = tk.BooleanVar(value=False)
-        ttk.Checkbutton(ayar_frame2, text="Yarım kalan taramaya devam et",
-                        variable=self.devam).pack(side="left", padx=(12, 0))
+        ttk.Checkbutton(ayar_frame2, text=t("devam"), variable=self.devam).pack(side="left", padx=(12, 0))
 
         self.hizli = tk.BooleanVar(value=True)
         self.paralel = tk.IntVar(value=1)
@@ -278,82 +392,95 @@ class Pencere:
         self.verimsiz = tk.BooleanVar(value=False)
         ayar_frame3 = ttk.Frame(f)
         ayar_frame3.grid(row=17, column=0, columnspan=2, sticky="w", pady=(2, 0))
-        ttk.Checkbutton(ayar_frame3, text="Hızlı mod (resim engelle, kısa bekleme)", variable=self.hizli).pack(side="left")
-        ttk.Checkbutton(ayar_frame3, text="Son 30 günde yapılan aramaları atla", variable=self.tekrar).pack(side="left", padx=(12, 0))
-        ttk.Checkbutton(ayar_frame3, text="Verimsiz kelimeleri atla", variable=self.verimsiz).pack(side="left", padx=(12, 0))
-        ttk.Label(ayar_frame3, text="Paralel:").pack(side="left", padx=(12, 2))
+        ttk.Checkbutton(ayar_frame3, text=t("hizli"), variable=self.hizli).pack(side="left")
+        ttk.Checkbutton(ayar_frame3, text=t("tekrar"), variable=self.tekrar).pack(side="left", padx=(12, 0))
+        ttk.Checkbutton(ayar_frame3, text=t("verimsiz"), variable=self.verimsiz).pack(side="left", padx=(12, 0))
+        ttk.Label(ayar_frame3, text=t("paralel")).pack(side="left", padx=(12, 2))
         ttk.Spinbox(ayar_frame3, from_=1, to=3, width=3, textvariable=self.paralel).pack(side="left")
 
         dugmeler = ttk.Frame(f)
         dugmeler.grid(row=18, column=0, columnspan=2, sticky="ew", pady=12)
-        self.baslat = ttk.Button(dugmeler, text="Başlat", command=self.baslat_tikla)
+        self.baslat = ttk.Button(dugmeler, text=t("baslat"), command=self.baslat_tikla)
         self.baslat.pack(side="left")
-        self.dur = ttk.Button(dugmeler, text="Durdur", command=self.durdur.set, state="disabled")
+        self.dur = ttk.Button(dugmeler, text=t("durdur"), command=self.durdur.set, state="disabled")
         self.dur.pack(side="left", padx=8)
-        self.havuz_sifirla = ttk.Button(dugmeler, text="Havuzu Sıfırla", command=self.havuz_temizle)
+        self.havuz_sifirla = ttk.Button(dugmeler, text=t("havuz_sifirla"), command=self.havuz_temizle)
         self.havuz_sifirla.pack(side="left", padx=(24, 0))
-        self.manuel_btn = ttk.Button(dugmeler, text="Manuel Mekan Ekle", command=self.manuel_penceresi)
+        self.manuel_btn = ttk.Button(dugmeler, text=t("manuel_ekle"), command=self.manuel_penceresi)
         self.manuel_btn.pack(side="left", padx=(8, 0))
 
-        self.klasor_btn = ttk.Button(dugmeler, text="Klasörü Aç", command=lambda: self.ac("klasor"), state="disabled")
+        self.klasor_btn = ttk.Button(dugmeler, text=t("klasor_ac"), command=lambda: self.ac("klasor"), state="disabled")
         self.klasor_btn.pack(side="right")
-        self.excel = ttk.Button(dugmeler, text="Excel'i Aç", command=lambda: self.ac("xlsx"), state="disabled")
+        self.excel = ttk.Button(dugmeler, text=t("excel_ac"), command=lambda: self.ac("xlsx"), state="disabled")
         self.excel.pack(side="right", padx=(0, 8))
-        self.json_btn = ttk.Button(dugmeler, text="JSON", command=self.json_disari_aktar, state="disabled")
+        self.json_btn = ttk.Button(dugmeler, text=t("json_btn"), command=self.json_disari_aktar, state="disabled")
         self.json_btn.pack(side="right", padx=(0, 8))
-        self.kml_btn = ttk.Button(dugmeler, text="KML", command=lambda: self.ac("kml"), state="disabled")
+        self.kml_btn = ttk.Button(dugmeler, text=t("kml_btn"), command=lambda: self.ac("kml"), state="disabled")
         self.kml_btn.pack(side="right", padx=(0, 8))
-        self.rehber = ttk.Button(dugmeler, text="📍 İlçe Haritası", command=lambda: self.ac("html"), state="disabled")
+        self.rehber = ttk.Button(dugmeler, text=t("ilce_rehberi"), command=lambda: self.ac("html"), state="disabled")
         self.rehber.pack(side="right", padx=(0, 8))
-        self.hepsi_rehber = ttk.Button(dugmeler, text="📡 HEPSİ (Local Radar)", command=lambda: self.ac("hepsi_html"))
+        self.hepsi_rehber = ttk.Button(dugmeler, text=t("hepsi_rehberi"), command=lambda: self.ac("hepsi_html"))
         self.hepsi_rehber.pack(side="right", padx=(0, 8))
-        self.esik_btn = ttk.Button(dugmeler, text="Kategori Eşikleri...", command=self.kategori_esikleri_penceresi)
+        self.esik_btn = ttk.Button(dugmeler, text=t("kategori_esikleri"), command=self.kategori_esikleri_penceresi)
         self.esik_btn.pack(side="left", padx=(8, 0))
 
         profil_frame = ttk.Frame(f)
         profil_frame.grid(row=19, column=0, columnspan=2, sticky="ew", pady=(0, 5))
-        ttk.Button(profil_frame, text="Ayarları Profile Kaydet", command=self.profil_kaydet).pack(side="left")
-        ttk.Button(profil_frame, text="Profil Yükle", command=self.profil_yukle).pack(side="left", padx=8)
+        ttk.Button(profil_frame, text=t("profil_kaydet"), command=self.profil_kaydet).pack(side="left")
+        ttk.Button(profil_frame, text=t("profil_yukle"), command=self.profil_yukle).pack(side="left", padx=8)
 
         self.cubuk = ttk.Progressbar(f, mode="determinate")
         self.cubuk.grid(row=20, column=0, columnspan=2, sticky="ew")
-        self.sure = ttk.Label(f, text="Süre: –", font=("Segoe UI", 10, "bold"))
+        self.sure = ttk.Label(f, text=t("sure"), font=("Segoe UI", 10, "bold"))
         self.sure.grid(row=21, column=0, columnspan=2, sticky="w", pady=(6, 0))
         self.gunluk = tk.Text(f, height=10, state="disabled", wrap="word")
         self.gunluk.grid(row=22, column=0, columnspan=2, sticky="nsew", pady=(4, 0))
         f.rowconfigure(22, weight=1)
-        self.yaz("📡 Local Radar hazır. Çoklu ilçe taramalarında sonuçlar 'local_radar_all.html' dosyasında birikir.")
-        self.yaz("İpucu: 'Tarama yapma' seçeneğiyle son taramayı saniyeler içinde farklı filtrelerle işleyebilirsiniz.")
+        self.yaz(t("hazir"))
+        self.yaz(t("ipucu"))
         kok.after(200, self.kuyruk_oku)
 
         self.ayarlari_yukle()
         self._openpyxl_acilis_uyarisi()
         kok.protocol("WM_DELETE_WINDOW", self.kapanis)
 
+    def dil_degisti(self, *_):
+        yeni = self.dil.get()
+        if yeni == dil_al():
+            return
+        dil_ayarla(yeni)
+        self.ayarlari_kaydet()
+        self.kok.destroy()
+        yeni_kok = tk.Tk()
+        yeni_kok.report_callback_exception = lambda t, d, iz: hata_yaz("".join(traceback.format_exception(t, d, iz)))
+        yeni_pencere = Pencere(yeni_kok)
+        yeni_pencere.dil.set(yeni)
+        yeni_kok.mainloop()
+
     def mod_degisti(self, *_):
         mod = self.mod_var.get()
         self._tumu_guncelle = True
-        if mod == "Hızlı (yemek ve gezi, tek parça)":
+        if mod == t("mod_hizli"):
             self.yemek.set(True); self.gezi.set(True)
             self.alisveris.set(False); self.saglik.set(False)
             self.oto.set(False); self.konaklama.set(False); self.banka.set(False)
             self.tumu.set(False)
             self.izgara.set(False)
             self.sabit_izgara.set(False)
-        elif mod == "Normal (yemek ve gezi, ızgaralı)":
+        elif mod == t("mod_normal"):
             self.yemek.set(True); self.gezi.set(True)
             self.alisveris.set(False); self.saglik.set(False)
             self.oto.set(False); self.konaklama.set(False); self.banka.set(False)
             self.tumu.set(False)
             self.izgara.set(True)
             self.sabit_izgara.set(False)
-        elif mod == "Kapsamlı (her şey, ızgaralı)":
+        elif mod == t("mod_kapsamli"):
             for v in self.kategoriler.values():
                 v.set(True)
             self.tumu.set(True)
             self.izgara.set(True)
             self.sabit_izgara.set(False)
-        elif mod == "Sabit ızgara (hücre boyutu km)":
+        elif mod == t("mod_sabit"):
             self.sabit_izgara.set(True)
             self.izgara.set(False)
         else:
@@ -362,7 +489,7 @@ class Pencere:
         self._hucre_km_durum_guncelle()
 
     def _hucre_km_durum_guncelle(self):
-        durum = "normal" if self.mod_var.get() == "Sabit ızgara (hücre boyutu km)" else "disabled"
+        durum = "normal" if self.mod_var.get() == t("mod_sabit") else "disabled"
         self.hucre_km_entry.configure(state=durum)
 
     def _paralel_oku(self):
@@ -386,6 +513,7 @@ class Pencere:
             "mahalle_bul": self.mahalle_bul.get(), "goster": self.goster.get(),
             "izgara": self.izgara.get(), "ham": self.ham.get(), "devam": self.devam.get(),
             "sabit_izgara": self.sabit_izgara.get(), "hucre_km": self._hucre_km_oku(),
+            "dil": self.dil.get(),
             "kategori_esikleri": self._kategori_esikleri_kayitlik(),
             **{k: v.get() for k, v in self.kategoriler.items()},
         }
@@ -405,6 +533,11 @@ class Pencere:
                 return
         else:
             a = veri
+
+        global _aktif_dil
+        dil_deger = a.get("dil", "en")
+        self.dil.set(dil_deger)
+        dil_ayarla(dil_deger)
 
         self.il.set(a.get("il", self.il.get()))
         self.ilce.set(a.get("ilce", self.ilce.get()))
@@ -438,7 +571,7 @@ class Pencere:
             self.tumu.set(False)
         self._tumu_guncelle = False
         if self.sabit_izgara.get():
-            self.mod_var.set("Sabit ızgara (hücre boyutu km)")
+            self.mod_var.set(t("mod_sabit"))
         self._hucre_km_durum_guncelle()
 
     def profil_kaydet(self):
@@ -463,7 +596,6 @@ class Pencere:
             except:
                 messagebox.showwarning("Uyarı", "Henüz kaydedilmiş profil yok.")
                 return
-
             ad = simpledialog.askstring("Profil Yükle", "Yüklenecek profili yazın:\n\nKayıtlılar:\n" + "\n".join(f"- {k}" for k in profiller.keys()))
             if ad and ad in profiller:
                 self.ayarlari_yukle(veri=profiller[ad])
@@ -499,10 +631,7 @@ class Pencere:
         try:
             import openpyxl  # noqa: F401
         except Exception:
-            messagebox.showwarning(
-                "Bilgi",
-                "Excel çıktısı için openpyxl gerekli. Kurmak için: pip install openpyxl",
-            )
+            messagebox.showwarning("Bilgi", "Excel çıktısı için openpyxl gerekli. Kurmak için: pip install openpyxl")
 
     def _onay_sor(self, baslik, metin, timeout=25):
         bekle = threading.Event()
@@ -535,11 +664,7 @@ class Pencere:
 
         kapsayici = ttk.Frame(pen, padding=10)
         kapsayici.pack(fill="both", expand=True)
-        ttk.Label(
-            kapsayici,
-            text="Boş bırakılan hücrelerde ana penceredeki 'En az puan' / 'En az yorum' değerleri varsayılan kabul edilir.",
-            foreground="#555",
-        ).pack(anchor="w", pady=(0, 8))
+        ttk.Label(kapsayici, text="Boş bırakılan hücrelerde ana penceredeki değerler varsayılan kabul edilir.", foreground="#555").pack(anchor="w", pady=(0, 8))
 
         canvas = tk.Canvas(kapsayici, highlightthickness=0)
         sb = ttk.Scrollbar(kapsayici, orient="vertical", command=canvas.yview)
@@ -547,7 +672,6 @@ class Pencere:
         icerik.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=icerik, anchor="nw")
         canvas.configure(yscrollcommand=sb.set)
-
         canvas.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
@@ -679,15 +803,20 @@ class Pencere:
             return
         gecen = time.time() - self.t0
         i, n = self.son_ilerleme
-        metin = f"Geçen süre: {sure_yaz(gecen)}"
+        if dil_al() == "en":
+            metin = f"Elapsed: {sure_yaz(gecen)}"
+        else:
+            metin = f"Geçen süre: {sure_yaz(gecen)}"
         if n:
-            metin += f"   ·   {i}/{n} arama"
+            metin += f"   ·   {i}/{n}" + (" searches" if dil_al() == "en" else " arama")
             kalan = self.kalan_saniye()
             if kalan is not None:
-                metin += f"   ·   Tahmini kalan: ~{sure_yaz(kalan)}"
+                prefix = "Est. remaining: ~" if dil_al() == "en" else "Tahmini kalan: ~"
+                metin += f"   ·   {prefix}{sure_yaz(kalan)}"
             else:
-                metin += "   ·   Kalan süre hesaplanıyor..."
-            metin += "   (yoğun yerler bölününce uzayabilir)"
+                msg = "Calculating remaining time..." if dil_al() == "en" else "Kalan süre hesaplanıyor..."
+                metin += f"   ·   {msg}"
+            metin += "   (may extend as dense areas split)" if dil_al() == "en" else "   (yoğun yerler bölününce uzayabilir)"
         self.sure.configure(text=metin)
         self.kok.after(1000, self.sure_tikla)
 
@@ -713,7 +842,7 @@ class Pencere:
         self.t0 = time.time()
         self.son_ilerleme = (0, 0)
         self.damgalar = []
-        self.sure.configure(text="Geçen süre: 0 sn")
+        self.sure.configure(text="Elapsed: 0s" if dil_al() == "en" else "Geçen süre: 0 sn")
         self.sure_tikla()
         self.cubuk.configure(value=0)
         for d in (self.excel, self.rehber, self.json_btn, self.kml_btn, self.klasor_btn):
@@ -749,7 +878,7 @@ class Pencere:
             ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001 | 0x00000002)
         try:
             if 'g' not in globals():
-                raise RuntimeError("gezi_rehberi_v4 modülü yüklenemediği için arama yapılamaz.")
+                raise RuntimeError("local_radar_core modülü yüklenemediği için arama yapılamaz.")
 
             ilce, il = v["ilce"], v["il"]
             mahalleler = [m.strip() for m in v["mahalle"].split(",") if m.strip()]
@@ -838,10 +967,8 @@ class Pencere:
                     toplam = g.arama_sayisi_tahmini(alanlar, kelime_sayisi, v.get("hucre_km", 1.0))
                     metin = f"Bu seçim {toplam} arama yapacak ({hucre_sayisi} hücre × {kelime_sayisi} kelime). Devam edilsin mi?"
                 else:
-                    metin = (
-                        "TÜMÜNÜ ARA seçildi. Bu seçim çok sayıda arama yapacak ve saatler sürebilir. "
-                        "Büyük ve yoğun ilçelerde süre birkaç katına çıkabilir.\n\nDevam edilsin mi?"
-                    )
+                    metin = ("TÜMÜNÜ ARA seçildi. Bu seçim çok sayıda arama yapacak ve saatler sürebilir. "
+                             "Büyük ve yoğun ilçelerde süre birkaç katına çıkabilir.\n\nDevam edilsin mi?")
                 if not self._onay_sor("Uzun sürecek tarama", metin):
                     self.kuyruk.put(("log", "Kullanıcı iptal etti."))
                     self.kuyruk.put(("iptal",))
@@ -849,16 +976,10 @@ class Pencere:
 
             ayar = dict(
                 baslik=(", ".join(mahalleler) + f" ({ilce})") if mahalleler else f"{ilce} · Local Radar",
-                dosya=slug,
-                ilce=ilce,
-                merkez=alanlar[0][:2],
-                yaricap=alanlar[0][2],
-                alanlar=alanlar,
-                bolgeler=[""],
-                kategoriler=kategoriler,
-                bolumler=bolumler,
-                tam_tarama=not mahalleler,
-                bolme=bool(v["izgara"]),
+                dosya=slug, ilce=ilce,
+                merkez=alanlar[0][:2], yaricap=alanlar[0][2], alanlar=alanlar, bolgeler=[""],
+                kategoriler=kategoriler, bolumler=bolumler,
+                tam_tarama=not mahalleler, bolme=bool(v["izgara"]),
                 sabit_izgara=bool(v.get("sabit_izgara")),
                 hucre_km=float(v.get("hucre_km", 1.0)),
                 kategori_esikleri=v.get("kategori_esikleri") or {},
@@ -870,12 +991,9 @@ class Pencere:
                 lambda i, n, m: self.kuyruk.put(("ilerleme", i, n, m)),
                 self.durdur.is_set,
                 birlestir=True,
-                min_puan=v["min_puan"],
-                min_oy=v["min_oy"],
-                mahalle_aktif=v["mahalle_bul"],
-                ekranda_goster=v["goster"],
-                ham_kullan=ham_kullan,
-                devam=v.get("devam", False),
+                min_puan=v["min_puan"], min_oy=v["min_oy"],
+                mahalle_aktif=v["mahalle_bul"], ekranda_goster=v["goster"],
+                ham_kullan=ham_kullan, devam=v.get("devam", False),
             )
             self.kuyruk.put(("bitti", ozet))
         except Exception as e:
@@ -890,8 +1008,9 @@ class Pencere:
         self.dur.configure(state="disabled")
         if self.t0 is not None:
             toplam_sure = sure_yaz(time.time() - self.t0)
-            self.sure.configure(text=f"Toplam süre: {toplam_sure}")
-            self.yaz(f"Toplam süre: {toplam_sure}")
+            etiket = "Total time" if dil_al() == "en" else "Toplam süre"
+            self.sure.configure(text=f"{etiket}: {toplam_sure}")
+            self.yaz(f"{etiket}: {toplam_sure}")
         self.t0 = None
 
         try:
@@ -928,11 +1047,11 @@ class Pencere:
         pen.transient(self.kok)
         pen.columnconfigure(1, weight=1)
         alanlar = [
-            ("Mekan adı *", "ad", ""), ("Tür (örn. Kebap restoranı)", "tur", ""),
-            ("Puan * (örn. 4,8)", "puan", ""), ("Yorum sayısı *", "yorum", ""),
-            ("İlçe", "ilce", self.ilce.get().strip()), ("Mahalle (örn. Cumhuriyet Mahallesi)", "mahalle", ""),
+            ("Mekan adı *", "ad", ""), ("Tür", "tur", ""),
+            ("Puan *", "puan", ""), ("Yorum sayısı *", "yorum", ""),
+            ("İlçe", "ilce", self.ilce.get().strip()), ("Mahalle", "mahalle", ""),
             ("Adres", "adres", ""), ("Telefon", "telefon", ""),
-            ("Google Haritalar linki (boş olabilir)", "link", ""),
+            ("Google Haritalar linki", "link", ""),
         ]
         vars_ = {}
         for i, (etiket, anahtar, varsayilan) in enumerate(alanlar):
@@ -940,8 +1059,6 @@ class Pencere:
             v = tk.StringVar(value=varsayilan)
             ttk.Entry(pen, textvariable=v, width=44).grid(row=i, column=1, sticky="ew", padx=10, pady=4)
             vars_[anahtar] = v
-        ttk.Label(pen, text="Link verirsen konum haritaya da eklenir. Bölüm (Yemek, Gezi...) adından ve türünden otomatik seçilir.",
-                  foreground="#666", wraplength=420).grid(row=len(alanlar), column=0, columnspan=2, padx=10, pady=(4, 0))
 
         def kaydet():
             ad = vars_["ad"].get().strip()

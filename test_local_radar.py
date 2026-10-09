@@ -1,20 +1,19 @@
 import importlib.util
 import os
 
-# Test dosyasının bulunduğu klasörü otomatik bul (Windows/Linux/Mac uyumlu)
+# Locate the module folder automatically (Windows/Linux/Mac compatible)
 KLASOR = os.path.dirname(os.path.abspath(__file__))
-MODUL_YOLU = os.path.join(KLASOR, "gezi_rehberi_v4.py")
+MODUL_YOLU = os.path.join(KLASOR, "local_radar_core.py")
 
-# Dosya gerçekten var mı kontrol et
+# Check if the module file exists
 if not os.path.exists(MODUL_YOLU):
     raise FileNotFoundError(
-        f"gezi_rehberi_v4.py bulunamadı!\n"
-        f"Aranan yol: {MODUL_YOLU}\n"
-        f"Lütfen test_gezi_v4_core.py ile gezi_rehberi_v4.py dosyalarının "
-        f"aynı klasörde olduğundan emin olun."
+        f"local_radar_core.py not found!\n"
+        f"Looking at: {MODUL_YOLU}\n"
+        f"Make sure test_local_radar.py and local_radar_core.py are in the same folder."
     )
 
-spec = importlib.util.spec_from_file_location("g4", MODUL_YOLU)
+spec = importlib.util.spec_from_file_location("lrc", MODUL_YOLU)
 g = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(g)
 
