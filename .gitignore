@@ -75,3 +75,11 @@ desktop.ini
 
 # Batch helper (temporary)
 temizle.bat
+
+# Backup files
+*_YEDEK.py
+*_YEDEK2.py
+*_backup.py
+
+# Deprecated
+local_radar_i18n.py
