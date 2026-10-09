@@ -1,0 +1,77 @@
+# ═══════════════════════════════════════════════════════════
+# Local Radar - Git ignore rules
+# ═══════════════════════════════════════════════════════════
+
+# Personal data files (do not commit)
+pool.json
+raw_pool.json
+raw_*.json
+scan_resume_*.json
+scan_ledger.json
+keyword_efficiency.json
+working_selectors.json
+neighborhood_cache.json
+neighborhood_boundaries.json
+manual_places.json
+settings.json
+profiles.json
+error_log.txt
+excluded_places.csv
+efficiency_report.txt
+
+# Diagnostic files
+diagnostic*.png
+diagnostic*.html
+scan_error.png
+
+# Output folders
+output/
+ciktilar/
+
+# Combined guides
+local_radar_all.*
+hepsi_*
+
+# Legacy Turkish-named data (just in case)
+havuz.json
+ham_*.json
+ara_kayit_*.json
+tarama_defteri.json
+kelime_verimi.json
+calisan_seciciler.json
+mahalle_onbellek.json
+mahalle_sinirlari.json
+manuel_mekanlar.json
+ayarlar.json
+profiller.json
+hata_log.txt
+elenenler.csv
+verim_raporu.txt
+tani*.png
+tani*.html
+tarama_hata.png
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+ENV/
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Batch helper (temporary)
+temizle.bat
