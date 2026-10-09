@@ -1,8 +1,8 @@
 """
-Local Radar - Core Engine (v4.3)
+Local Radar - Core Engine (v1.0.0)
 Scrapes Google Maps to find highly-rated places around you.
 
-v4.3 updates:
+v1.0.0 updates:
   - All file names moved to English (Local Radar branding)
   - Day planner (G1-G5 tags + day filter)
   - Budget tracker (total, per person, per day)
@@ -24,7 +24,7 @@ MAHALLE_TAKMA_AD = {"Fatih Sultan Mehmet": "Fatih Sultan"}
 YENI_GUN = 30
 # ========================================================
 LOG = print
-SURUM = "2026-10-08-v4.3-LocalRadar"
+SURUM = "2026-10-08-v1.0.0-LocalRadar"
 
 # ═══════════════════════════════════════════════════════════
 # FILE NAMES (English)
@@ -176,7 +176,7 @@ MODLAR = {
     "Kapsamlı (her şey, ızgaralı)":      dict(kategoriler=TUMU, izgara=True),
 }
 
-# ---------- Categorization rules (v4.3) ----------
+# ---------- Categorization rules (v1.0.0) ----------
 KURALLAR = [
     ("Alışveriş", "Giyim, Teknoloji, Mağaza",
      ["kale cam", "kale balkon", "kale kapı", "kale cam balkon",

@@ -1,5 +1,5 @@
 """
-Local Radar - GUI (v4.3)
+Local Radar - GUI (v1.0.0)
 Double-click to launch. No terminal needed.
 Must be in the SAME folder as local_radar_core.py.
 """
@@ -14,7 +14,7 @@ from tkinter import ttk, messagebox, simpledialog
 # ═══════════════════════════════════════════════════════════
 METINLER = {
     "tr": {
-        "baslik": "📡 Local Radar · v4.3",
+        "baslik": "📡 Local Radar · v1.0.0",
         "dil": "Dil:",
         "il": "İl", "ilce": "İlçe", "mahalle": "Mahalle",
         "mahalle_ipucu": "Tüm ilçe için boş bırakın. Virgülle ayırarak çoklu arama yapabilirsiniz (Örn: Karataş, Akkent)",
@@ -49,7 +49,7 @@ METINLER = {
         "mod_sabit": "Sabit ızgara (hücre boyutu km)",
     },
     "en": {
-        "baslik": "📡 Local Radar · v4.3",
+        "baslik": "📡 Local Radar · v1.0.0",
         "dil": "Language:",
         "il": "City", "ilce": "District", "mahalle": "Neighborhood",
         "mahalle_ipucu": "Leave empty for whole district. Separate with commas (e.g. Karataş, Akkent)",
