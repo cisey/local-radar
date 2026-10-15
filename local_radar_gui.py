@@ -1,5 +1,5 @@
 """
-Local Radar - GUI (v1.0.0)
+Local Radar - Modern GUI (v1.1.0)
 Double-click to launch. No terminal needed.
 Must be in the SAME folder as local_radar_core.py.
 """
@@ -14,34 +14,41 @@ from tkinter import ttk, messagebox, simpledialog
 # ═══════════════════════════════════════════════════════════
 METINLER = {
     "tr": {
-        "baslik": "📡 Local Radar · v1.0.0",
+        "baslik": "📡 Local Radar · v1.1.0",
+        "alt_baslik": "Google Haritalar tarama, puanlama ve interaktif rehber oluşturucu",
         "dil": "Dil:",
+        "konum_grup": "📍 Konum ve Filtre Ayarları",
         "il": "İl", "ilce": "İlçe", "mahalle": "Mahalle",
-        "mahalle_ipucu": "Tüm ilçe için boş bırakın. Virgülle ayırarak çoklu arama yapabilirsiniz (Örn: Karataş, Akkent)",
-        "yaricap": "Yarıçap (km)", "yaricap_ipucu": "Boş bırakırsanız sistem otomatik belirler",
+        "il_ipucu": "İl seçin veya yazın (Örn: Gaziantep)",
+        "ilce_ipucu": "İlçe seçin veya yazın (Örn: Nizip)",
+        "mahalle_ipucu": "Tüm ilçe için boş bırakın veya virgülle ayırın (Örn: الفرات, Cumhuriyet)",
+        "yaricap": "Yarıçap (km)", "yaricap_ipucu": "Boş = Otomatik",
         "min_puan": "En az puan", "min_yorum": "En az yorum",
-        "ozel_arama": "Özel Arama", "ozel_arama_ipucu": "Listede olmayan bir şey aramak için",
+        "ozel_arama": "Özel Arama", "ozel_arama_ipucu": "Ekstra anahtar kelime (isteğe bağlı)",
         "tarama_modu": "Tarama Modu:", "hucre_km": "Hücre boyutu (km):",
-        "kategoriler": "Kategoriler",
+        "kategoriler": "🗂️ Kategoriler ve Tarama Kapsamı",
         "yemek": "Yemek (Restoran, Kafe)", "gezi": "Gezilecek Yerler",
         "alisveris": "Alışveriş (Market, Giyim)", "saglik": "Sağlık (Hastane, Eczane)",
         "oto": "Oto & Ulaşım (Tamir, Lastik)", "konaklama": "Konaklama (Otel)",
         "banka": "Banka & Kargo", "tumu": "TÜMÜNÜ ARA (DİKKAT: saatler sürebilir!)",
+        "secenekler_grup": "⚙️ Tarama Seçenekleri",
         "mahalle_bul": "Yerlerin mahallesini bul", "goster": "Tarayıcı penceresini göster",
         "izgara": "Yoğun yerleri otomatik parçala (kapsamlı)",
         "ham_kullan": "Tarama yapma, son taramayı (ham veri) kullan",
         "devam": "Yarım kalan taramaya devam et",
         "hizli": "Hızlı mod (resim engelle, kısa bekleme)",
         "tekrar": "Son 30 günde yapılan aramaları atla", "verimsiz": "Verimsiz kelimeleri atla",
-        "paralel": "Paralel:", "baslat": "Başlat", "durdur": "Durdur",
-        "havuz_sifirla": "Havuzu Sıfırla", "manuel_ekle": "Manuel Mekan Ekle",
-        "klasor_ac": "Klasörü Aç", "excel_ac": "Excel'i Aç", "json_btn": "JSON", "kml_btn": "KML",
+        "paralel": "Paralel:", "baslat": "▶ Başlat", "durdur": "⏹ Durdur",
+        "havuz_sifirla": "🗑️ Havuzu Sıfırla", "manuel_ekle": "➕ Manuel Mekan Ekle",
+        "cikti_grup": "📂 Çıktılar ve Harita Rehberleri",
+        "klasor_ac": "📁 Klasörü Aç", "excel_ac": "📊 Excel'i Aç", "json_btn": "{ } JSON", "kml_btn": "🌍 KML",
         "ilce_rehberi": "📍 İlçe Haritası", "hepsi_rehberi": "📡 HEPSİ (Local Radar)",
-        "kategori_esikleri": "Kategori Eşikleri...",
-        "profil_kaydet": "Ayarları Profile Kaydet", "profil_yukle": "Profil Yükle",
+        "sade_rehberi": "🪶 İlçe (Sade)", "hepsi_sade_rehberi": "🪶 HEPSİ (Sade)",
+        "kategori_esikleri": "🎚️ Kategori Eşikleri...",
+        "profil_kaydet": "💾 Profil Kaydet", "profil_yukle": "📂 Profil Yükle",
         "sure": "Süre: –",
         "hazir": "📡 Local Radar hazır. Çoklu ilçe taramalarında sonuçlar 'local_radar_all.html' dosyasında birikir.",
-        "ipucu": "İpucu: 'Tarama yapma' seçeneğiyle son taramayı saniyeler içinde farklı filtrelerle işleyebilirsiniz.",
+        "ipucu": "İpucu: 'Tarama yapma, son taramayı kullan' seçeneğiyle mevcut veriyi saniyeler içinde yeniden işleyebilirsiniz.",
         "mod_ozel": "Özel Seçim",
         "mod_hizli": "Hızlı (yemek ve gezi, tek parça)",
         "mod_normal": "Normal (yemek ve gezi, ızgaralı)",
@@ -49,31 +56,38 @@ METINLER = {
         "mod_sabit": "Sabit ızgara (hücre boyutu km)",
     },
     "en": {
-        "baslik": "📡 Local Radar · v1.0.0",
+        "baslik": "📡 Local Radar · v1.1.0",
+        "alt_baslik": "Google Maps scanner, scorer and interactive guide builder",
         "dil": "Language:",
+        "konum_grup": "📍 Location & Filter Settings",
         "il": "City", "ilce": "District", "mahalle": "Neighborhood",
-        "mahalle_ipucu": "Leave empty for whole district. Separate with commas (e.g. Karataş, Akkent)",
-        "yaricap": "Radius (km)", "yaricap_ipucu": "Leave empty for auto-detection",
+        "il_ipucu": "Select or type city name (e.g. Gaziantep)",
+        "ilce_ipucu": "Select or type district name (e.g. Nizip)",
+        "mahalle_ipucu": "Leave empty for whole district, or separate with commas",
+        "yaricap": "Radius (km)", "yaricap_ipucu": "Empty = Auto",
         "min_puan": "Min rating", "min_yorum": "Min reviews",
-        "ozel_arama": "Custom search", "ozel_arama_ipucu": "Search for something not in the list",
+        "ozel_arama": "Custom search", "ozel_arama_ipucu": "Extra keywords (optional)",
         "tarama_modu": "Scan mode:", "hucre_km": "Cell size (km):",
-        "kategoriler": "Categories",
+        "kategoriler": "🗂️ Categories & Scan Scope",
         "yemek": "Food (Restaurants, Cafes)", "gezi": "Attractions",
         "alisveris": "Shopping (Market, Clothing)", "saglik": "Health (Hospital, Pharmacy)",
         "oto": "Auto & Transport (Repair, Tires)", "konaklama": "Accommodation (Hotel)",
         "banka": "Bank & Cargo", "tumu": "SCAN EVERYTHING (WARNING: may take hours!)",
+        "secenekler_grup": "⚙️ Scan Options",
         "mahalle_bul": "Detect neighborhoods", "goster": "Show browser window",
         "izgara": "Auto-split dense areas (comprehensive)",
         "ham_kullan": "Skip scan, use last raw data",
         "devam": "Resume incomplete scan",
         "hizli": "Fast mode (block images, short waits)",
         "tekrar": "Skip searches from last 30 days", "verimsiz": "Skip inefficient keywords",
-        "paralel": "Parallel:", "baslat": "Start", "durdur": "Stop",
-        "havuz_sifirla": "Reset Pool", "manuel_ekle": "Add Manual Place",
-        "klasor_ac": "Open Folder", "excel_ac": "Open Excel", "json_btn": "JSON", "kml_btn": "KML",
+        "paralel": "Parallel:", "baslat": "▶ Start", "durdur": "⏹ Stop",
+        "havuz_sifirla": "🗑️ Reset Pool", "manuel_ekle": "➕ Add Manual Place",
+        "cikti_grup": "📂 Outputs & Map Guides",
+        "klasor_ac": "📁 Open Folder", "excel_ac": "📊 Open Excel", "json_btn": "{ } JSON", "kml_btn": "🌍 KML",
         "ilce_rehberi": "📍 District Map", "hepsi_rehberi": "📡 ALL (Local Radar)",
-        "kategori_esikleri": "Category Thresholds...",
-        "profil_kaydet": "Save Settings as Profile", "profil_yukle": "Load Profile",
+        "sade_rehberi": "🪶 District (Simple)", "hepsi_sade_rehberi": "🪶 ALL (Simple)",
+        "kategori_esikleri": "🎚️ Category Thresholds...",
+        "profil_kaydet": "💾 Save Profile", "profil_yukle": "📂 Load Profile",
         "sure": "Time: –",
         "hazir": "📡 Local Radar ready. Multi-district scans accumulate in 'local_radar_all.html'.",
         "ipucu": "Tip: Use 'Skip scan' to re-process the last scan with different filters in seconds.",
@@ -85,7 +99,7 @@ METINLER = {
     }
 }
 
-_aktif_dil = "en"
+_aktif_dil = "tr"
 
 
 def dil_ayarla(dil):
@@ -215,12 +229,92 @@ IL_ILCE = {
 ILLER = sorted(IL_ILCE.keys())
 
 
+def tema_uygula(kok):
+    stil = ttk.Style(kok)
+    try:
+        stil.theme_use("clam")
+    except Exception:
+        pass
+
+    bg = "#f4f6f9"
+    card = "#ffffff"
+    ink = "#1f2937"
+    mut = "#6b7280"
+    line = "#dce1e8"
+    primary = "#1a73e8"
+    primary_hover = "#1557b0"
+    green = "#0b8043"
+    green_hover = "#086333"
+    danger = "#d93025"
+
+    kok.configure(bg=bg)
+
+    stil.configure(".", background=bg, foreground=ink, font=("Segoe UI", 9))
+    stil.configure("TFrame", background=bg)
+    stil.configure("Card.TFrame", background=card)
+    stil.configure("TLabel", background=bg, foreground=ink, font=("Segoe UI", 9))
+    stil.configure("Card.TLabel", background=card, foreground=ink, font=("Segoe UI", 9, "bold"))
+    stil.configure("Hint.TLabel", background=card, foreground=mut, font=("Segoe UI", 8))
+    stil.configure("Header.TLabel", background=bg, foreground=primary, font=("Segoe UI", 16, "bold"))
+    stil.configure("SubHeader.TLabel", background=bg, foreground=mut, font=("Segoe UI", 9))
+    stil.configure("Status.TLabel", background=bg, foreground=ink, font=("Segoe UI", 9, "bold"))
+
+    stil.configure("TLabelframe", background=card, bordercolor=line, relief="solid", borderwidth=1)
+    stil.configure("TLabelframe.Label", background=card, foreground=primary, font=("Segoe UI", 9, "bold"))
+
+    stil.configure("TCheckbutton", background=card, foreground=ink, font=("Segoe UI", 9))
+    stil.map("TCheckbutton", background=[("active", card)])
+
+    stil.configure("TEntry", fieldbackground="#f9fafb", bordercolor=line, lightcolor=line, darkcolor=line, padding=5)
+    stil.map("TEntry", bordercolor=[("focus", primary)], lightcolor=[("focus", primary)])
+
+    stil.configure("TCombobox", fieldbackground="#f9fafb", background="#ffffff", bordercolor=line, lightcolor=line, darkcolor=line, padding=4)
+    stil.map("TCombobox", bordercolor=[("focus", primary)], fieldbackground=[("readonly", "#f9fafb")])
+
+    stil.configure("TSpinbox", fieldbackground="#f9fafb", bordercolor=line, padding=3)
+
+    # Standart Buton
+    stil.configure("TButton", background="#ffffff", foreground=ink, bordercolor=line, lightcolor="#ffffff", darkcolor=line,
+                   font=("Segoe UI", 9, "bold"), padding=(10, 5), relief="solid")
+    stil.map("TButton",
+             background=[("active", "#e8f0fe"), ("disabled", "#f1f3f4")],
+             foreground=[("active", primary), ("disabled", "#9aa0a6")],
+             bordercolor=[("active", primary), ("disabled", "#e0e0e0")])
+
+    # Başlat Butonu (Yeşil)
+    stil.configure("Start.TButton", background=green, foreground="#ffffff", bordercolor=green,
+                   lightcolor=green, darkcolor=green, font=("Segoe UI", 9, "bold"), padding=(16, 6))
+    stil.map("Start.TButton",
+             background=[("active", green_hover), ("disabled", "#a8dab5")],
+             foreground=[("disabled", "#ffffff")])
+
+    # Durdur Butonu (Kırmızı)
+    stil.configure("Stop.TButton", background=danger, foreground="#ffffff", bordercolor=danger,
+                   lightcolor=danger, darkcolor=danger, font=("Segoe UI", 9, "bold"), padding=(12, 6))
+    stil.map("Stop.TButton",
+             background=[("active", "#b3261e"), ("disabled", "#f1f3f4")],
+             foreground=[("disabled", "#9aa0a6")],
+             bordercolor=[("disabled", "#e0e0e0")])
+
+    # Vurgulu Rehber Butonu (Mavi)
+    stil.configure("Primary.TButton", background=primary, foreground="#ffffff", bordercolor=primary,
+                   lightcolor=primary, darkcolor=primary, font=("Segoe UI", 9, "bold"), padding=(11, 5))
+    stil.map("Primary.TButton",
+             background=[("active", primary_hover), ("disabled", "#f1f3f4")],
+             foreground=[("disabled", "#9aa0a6")],
+             bordercolor=[("disabled", "#e0e0e0")])
+
+    stil.configure("Horizontal.TProgressbar", troughcolor="#e2e8f0", background=primary, bordercolor="#e2e8f0", lightcolor=primary, darkcolor=primary, thickness=8)
+
+
 class Pencere:
     def __init__(self, kok):
         self.kok = kok
+        tema_uygula(kok)
         self.dil = tk.StringVar(value=_aktif_dil)
         kok.title(t("baslik"))
-        kok.geometry("680x950")
+        kok.geometry("880x820")
+        kok.minsize(780, 740)
         self.kuyruk = queue.Queue()
         self.durdur = threading.Event()
         self.ozet = None
@@ -233,57 +327,76 @@ class Pencere:
         if 'g' in globals():
             g.LOG = lambda m: self.kuyruk.put(("log", str(m)))
 
-        # ⭐ Dil seçici (üstte, sağda)
-        dil_frame = ttk.Frame(kok)
-        dil_frame.pack(fill="x", padx=14, pady=(10, 0))
-        ttk.Label(dil_frame, text=t("dil")).pack(side="right", padx=(5, 0))
-        self.dil_kutu = ttk.Combobox(dil_frame, textvariable=self.dil,
-                                      values=["tr", "en"], state="readonly", width=5)
-        self.dil_kutu.pack(side="right")
+        ana = ttk.Frame(kok, padding=(16, 12, 16, 14))
+        ana.pack(fill="both", expand=True)
+        ana.columnconfigure(0, weight=1)
+
+        # ── 1. ÜST BAŞLIK (HEADER) ──
+        ust = ttk.Frame(ana)
+        ust.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        ust.columnconfigure(0, weight=1)
+
+        baslik_sol = ttk.Frame(ust)
+        baslik_sol.grid(row=0, column=0, sticky="w")
+        ttk.Label(baslik_sol, text=t("baslik"), style="Header.TLabel").pack( anchor="w")
+        ttk.Label(baslik_sol, text=t("alt_baslik"), style="SubHeader.TLabel").pack(anchor="w")
+
+        baslik_sag = ttk.Frame(ust)
+        baslik_sag.grid(row=0, column=1, sticky="e")
+        ttk.Button(baslik_sag, text=t("profil_kaydet"), command=self.profil_kaydet).pack(side="left", padx=(0, 6))
+        ttk.Button(baslik_sag, text=t("profil_yukle"), command=self.profil_yukle).pack(side="left", padx=(0, 12))
+        ttk.Label(baslik_sag, text=t("dil")).pack(side="left", padx=(0, 4))
+        self.dil_kutu = ttk.Combobox(baslik_sag, textvariable=self.dil, values=["tr", "en"], state="readonly", width=4)
+        self.dil_kutu.pack(side="left")
         self.dil_kutu.bind("<<ComboboxSelected>>", self.dil_degisti)
 
-        f = ttk.Frame(kok, padding=14)
-        f.pack(fill="both", expand=True)
-        f.columnconfigure(1, weight=1)
+        # ── 2. KONUM VE FİLTRE KARTI ──
+        konum_kart = ttk.LabelFrame(ana, text=f"  {t('konum_grup')}  ", padding=(12, 8))
+        konum_kart.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        for c in (1, 3):
+            konum_kart.columnconfigure(c, weight=1)
 
-        def alan(satir, etiket, deger, ipucu="", degerler=None, placeholder=""):
-            ttk.Label(f, text=etiket).grid(row=satir, column=0, sticky="w", pady=3)
-            v = tk.StringVar(value=deger)
-            if degerler is not None:
-                kutu = ttk.Combobox(f, textvariable=v, values=degerler)
-                kutu.grid(row=satir, column=1, sticky="ew", pady=3, padx=(8, 0))
-                return v, kutu
-            entry = ttk.Entry(f, textvariable=v)
-            entry.grid(row=satir, column=1, sticky="ew", pady=3, padx=(8, 0))
-            if ipucu:
-                ttk.Label(f, text=ipucu, foreground="#666").grid(row=satir + 1, column=1, sticky="w", padx=(8, 0))
-            # ⭐ Placeholder sistemi
-            if placeholder:
-                entry.insert(0, placeholder)
-                entry.configure(foreground="gray")
-                def on_focus_in(event):
-                    if entry.get() == placeholder:
-                        entry.delete(0, "end")
-                        entry.configure(foreground="black")
-                def on_focus_out(event):
-                    if not entry.get().strip():
-                        entry.insert(0, placeholder)
-                        entry.configure(foreground="gray")
-                entry.bind("<FocusIn>", on_focus_in)
-                entry.bind("<FocusOut>", on_focus_out)
-            return v, entry
+        self.il = tk.StringVar(value="")
+        self.ilce = tk.StringVar(value="")
+        self.mahalle = tk.StringVar(value="")
+        self.yaricap = tk.StringVar(value="")
+        self.puan = tk.StringVar(value="0")
+        self.oy = tk.StringVar(value="0")
+        self.ozel_arama = tk.StringVar(value="")
 
-        self.il, self.il_kutu = alan(0, t("il"), "", degerler=[""] + ILLER)
-        ttk.Label(f, text="Type the city name (e.g. Gaziantep) or select from list",
-                  foreground="#888", font=("Segoe UI", 8, "italic")).grid(row=1, column=1, sticky="w", padx=(8, 0))
-        self.ilce, self.ilce_kutu = alan(2, t("ilce"), "", degerler=[])
-        ttk.Label(f, text="Type the district name (e.g. Şahinbey) — list loads after city selection",
-                  foreground="#888", font=("Segoe UI", 8, "italic")).grid(row=3, column=1, sticky="w", padx=(8, 0))
-        self.mahalle, _ = alan(4, t("mahalle"), "", t("mahalle_ipucu"))
-        self.yaricap, _ = alan(6, t("yaricap"), "", t("yaricap_ipucu"))
-        self.puan, _ = alan(8, t("min_puan"), "4.0")
-        self.oy, _ = alan(10, t("min_yorum"), "50")
-        self.ozel_arama, _ = alan(12, t("ozel_arama"), "", t("ozel_arama_ipucu"))
+        # Satır 0: İl & İlçe yan yana
+        ttk.Label(konum_kart, text=t("il"), style="Card.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=3)
+        self.il_kutu = ttk.Combobox(konum_kart, textvariable=self.il, values=[""] + ILLER)
+        self.il_kutu.grid(row=0, column=1, sticky="ew", padx=(0, 16), pady=3)
+
+        ttk.Label(konum_kart, text=t("ilce"), style="Card.TLabel").grid(row=0, column=2, sticky="w", padx=(0, 8), pady=3)
+        self.ilce_kutu = ttk.Combobox(konum_kart, textvariable=self.ilce, values=[])
+        self.ilce_kutu.grid(row=0, column=3, sticky="ew", pady=3)
+
+        ttk.Label(konum_kart, text=t("il_ipucu"), style="Hint.TLabel").grid(row=1, column=1, sticky="w", padx=(0, 16), pady=(0, 4))
+        ttk.Label(konum_kart, text=t("ilce_ipucu"), style="Hint.TLabel").grid(row=1, column=3, sticky="w", pady=(0, 4))
+
+        # Satır 2: Mahalle (tam genişlik)
+        ttk.Label(konum_kart, text=t("mahalle"), style="Card.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=3)
+        ttk.Entry(konum_kart, textvariable=self.mahalle).grid(row=2, column=1, columnspan=3, sticky="ew", pady=3)
+        ttk.Label(konum_kart, text=t("mahalle_ipucu"), style="Hint.TLabel").grid(row=3, column=1, columnspan=3, sticky="w", pady=(0, 4))
+
+        # Satır 4: Yarıçap, En Az Puan, En Az Yorum, Özel Arama (kompakt şerit)
+        filtre_serit = ttk.Frame(konum_kart, style="Card.TFrame")
+        filtre_serit.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(2, 2))
+        filtre_serit.columnconfigure(7, weight=1)
+
+        ttk.Label(filtre_serit, text=t("yaricap"), style="Card.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 6))
+        ttk.Entry(filtre_serit, textvariable=self.yaricap, width=10).grid(row=0, column=1, sticky="w", padx=(0, 14))
+
+        ttk.Label(filtre_serit, text=t("min_puan"), style="Card.TLabel").grid(row=0, column=2, sticky="w", padx=(0, 6))
+        ttk.Entry(filtre_serit, textvariable=self.puan, width=8).grid(row=0, column=3, sticky="w", padx=(0, 14))
+
+        ttk.Label(filtre_serit, text=t("min_yorum"), style="Card.TLabel").grid(row=0, column=4, sticky="w", padx=(0, 6))
+        ttk.Entry(filtre_serit, textvariable=self.oy, width=8).grid(row=0, column=5, sticky="w", padx=(0, 14))
+
+        ttk.Label(filtre_serit, text=t("ozel_arama"), style="Card.TLabel").grid(row=0, column=6, sticky="w", padx=(0, 6))
+        ttk.Entry(filtre_serit, textvariable=self.ozel_arama).grid(row=0, column=7, sticky="ew")
 
         def ilce_doldur(*_):
             il = self.il.get().strip()
@@ -291,9 +404,15 @@ class Pencere:
         self.il.trace_add("write", ilce_doldur)
         ilce_doldur()
 
-        mod_frame = ttk.Frame(f)
-        mod_frame.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(10, 0))
-        ttk.Label(mod_frame, text=t("tarama_modu")).pack(side="left", padx=(0, 8))
+        # ── 3. KATEGORİLER VE TARAMA MODU KARTI ──
+        kat_frame = ttk.LabelFrame(ana, text=f"  {t('kategoriler')}  ", padding=(12, 8))
+        kat_frame.grid(row=2, column=0, sticky="ew", pady=(0, 8))
+        for c in range(4):
+            kat_frame.columnconfigure(c, weight=1)
+
+        mod_frame = ttk.Frame(kat_frame, style="Card.TFrame")
+        mod_frame.grid(row=0, column=0, columnspan=4, sticky="ew", pady=(0, 8))
+        ttk.Label(mod_frame, text=t("tarama_modu"), style="Card.TLabel").pack(side="left", padx=(0, 8))
         self.mod_var = tk.StringVar(value=t("mod_ozel"))
         self.mod_kutu = ttk.Combobox(
             mod_frame,
@@ -307,7 +426,7 @@ class Pencere:
 
         self.sabit_izgara = tk.BooleanVar(value=False)
         self.hucre_km = tk.StringVar(value="1.0")
-        ttk.Label(mod_frame, text="  " + t("hucre_km")).pack(side="left", padx=(10, 4))
+        ttk.Label(mod_frame, text="   " + t("hucre_km"), style="Card.TLabel").pack(side="left", padx=(10, 6))
         self.hucre_km_entry = ttk.Entry(mod_frame, textvariable=self.hucre_km, width=8, state="disabled")
         self.hucre_km_entry.pack(side="left")
 
@@ -323,25 +442,23 @@ class Pencere:
                             "banka": self.banka}
         self.tumu = tk.BooleanVar(value=False)
 
-        kat_frame = ttk.LabelFrame(f, text=t("kategoriler"))
-        kat_frame.grid(row=14, column=0, columnspan=2, sticky="ew", pady=(12, 8), ipadx=5, ipady=5)
+        ttk.Checkbutton(kat_frame, text=t("yemek"), variable=self.yemek).grid(row=1, column=0, sticky="w", pady=3)
+        ttk.Checkbutton(kat_frame, text=t("gezi"), variable=self.gezi).grid(row=1, column=1, sticky="w", pady=3)
+        ttk.Checkbutton(kat_frame, text=t("alisveris"), variable=self.alisveris).grid(row=1, column=2, sticky="w", pady=3)
+        ttk.Checkbutton(kat_frame, text=t("saglik"), variable=self.saglik).grid(row=1, column=3, sticky="w", pady=3)
+        ttk.Checkbutton(kat_frame, text=t("oto"), variable=self.oto).grid(row=2, column=0, sticky="w", pady=3)
+        ttk.Checkbutton(kat_frame, text=t("konaklama"), variable=self.konaklama).grid(row=2, column=1, sticky="w", pady=3)
+        ttk.Checkbutton(kat_frame, text=t("banka"), variable=self.banka).grid(row=2, column=2, sticky="w", pady=3)
 
-        ttk.Checkbutton(kat_frame, text=t("yemek"), variable=self.yemek).grid(row=0, column=0, sticky="w", padx=5, pady=2)
-        ttk.Checkbutton(kat_frame, text=t("gezi"), variable=self.gezi).grid(row=0, column=1, sticky="w", padx=5, pady=2)
-        ttk.Checkbutton(kat_frame, text=t("alisveris"), variable=self.alisveris).grid(row=0, column=2, sticky="w", padx=5, pady=2)
-        ttk.Checkbutton(kat_frame, text=t("saglik"), variable=self.saglik).grid(row=1, column=0, sticky="w", padx=5, pady=2)
-        ttk.Checkbutton(kat_frame, text=t("oto"), variable=self.oto).grid(row=1, column=1, sticky="w", padx=5, pady=2)
-        ttk.Checkbutton(kat_frame, text=t("konaklama"), variable=self.konaklama).grid(row=1, column=2, sticky="w", padx=5, pady=2)
-        ttk.Checkbutton(kat_frame, text=t("banka"), variable=self.banka).grid(row=2, column=0, sticky="w", padx=5, pady=2)
-
-        tumu_satir = ttk.Frame(kat_frame)
-        tumu_satir.grid(row=3, column=0, columnspan=3, sticky="w", padx=5, pady=(8, 2))
+        tumu_satir = ttk.Frame(kat_frame, style="Card.TFrame")
+        tumu_satir.grid(row=3, column=0, columnspan=4, sticky="w", pady=(6, 0))
         self.tumu_cb = ttk.Checkbutton(tumu_satir, text="", variable=self.tumu)
         self.tumu_cb.pack(side="left")
         self.tumu_etiket = tk.Label(
             tumu_satir,
             text=t("tumu"),
-            fg="red",
+            fg="#d93025",
+            bg="#ffffff",
             font=("Segoe UI", 9, "bold"),
             cursor="hand2",
         )
@@ -369,73 +486,108 @@ class Pencere:
         for v in self.kategoriler.values():
             v.trace_add("write", kategori_degisti)
 
-        ayar_frame = ttk.Frame(f)
-        ayar_frame.grid(row=15, column=0, columnspan=2, sticky="w", pady=(5, 0))
+        # ── 4. TARAMA SEÇENEKLERİ KARTI ──
+        sec_kart = ttk.LabelFrame(ana, text=f"  {t('secenekler_grup')}  ", padding=(12, 8))
+        sec_kart.grid(row=3, column=0, sticky="ew", pady=(0, 8))
+        for c in range(3):
+            sec_kart.columnconfigure(c, weight=1)
+
         self.mahalle_bul = tk.BooleanVar(value=True)
         self.goster = tk.BooleanVar(value=True)
         self.izgara = tk.BooleanVar(value=True)
         self.ham = tk.BooleanVar(value=False)
-        ttk.Checkbutton(ayar_frame, text=t("mahalle_bul"), variable=self.mahalle_bul).pack(side="left", padx=(0, 12))
-        ttk.Checkbutton(ayar_frame, text=t("goster"), variable=self.goster).pack(side="left", padx=(0, 12))
-        ttk.Checkbutton(ayar_frame, text=t("izgara"), variable=self.izgara).pack(side="left")
-
-        ayar_frame2 = ttk.Frame(f)
-        ayar_frame2.grid(row=16, column=0, columnspan=2, sticky="w", pady=(2, 0))
-        ttk.Checkbutton(ayar_frame2, text=t("ham_kullan"), variable=self.ham).pack(side="left")
-
         self.devam = tk.BooleanVar(value=False)
-        ttk.Checkbutton(ayar_frame2, text=t("devam"), variable=self.devam).pack(side="left", padx=(12, 0))
-
         self.hizli = tk.BooleanVar(value=True)
         self.paralel = tk.IntVar(value=1)
         self.tekrar = tk.BooleanVar(value=False)
         self.verimsiz = tk.BooleanVar(value=False)
-        ayar_frame3 = ttk.Frame(f)
-        ayar_frame3.grid(row=17, column=0, columnspan=2, sticky="w", pady=(2, 0))
-        ttk.Checkbutton(ayar_frame3, text=t("hizli"), variable=self.hizli).pack(side="left")
-        ttk.Checkbutton(ayar_frame3, text=t("tekrar"), variable=self.tekrar).pack(side="left", padx=(12, 0))
-        ttk.Checkbutton(ayar_frame3, text=t("verimsiz"), variable=self.verimsiz).pack(side="left", padx=(12, 0))
-        ttk.Label(ayar_frame3, text=t("paralel")).pack(side="left", padx=(12, 2))
-        ttk.Spinbox(ayar_frame3, from_=1, to=3, width=3, textvariable=self.paralel).pack(side="left")
 
-        dugmeler = ttk.Frame(f)
-        dugmeler.grid(row=18, column=0, columnspan=2, sticky="ew", pady=12)
-        self.baslat = ttk.Button(dugmeler, text=t("baslat"), command=self.baslat_tikla)
+        ttk.Checkbutton(sec_kart, text=t("mahalle_bul"), variable=self.mahalle_bul).grid(row=0, column=0, sticky="w", pady=2)
+        ttk.Checkbutton(sec_kart, text=t("goster"), variable=self.goster).grid(row=0, column=1, sticky="w", pady=2)
+        ttk.Checkbutton(sec_kart, text=t("izgara"), variable=self.izgara).grid(row=0, column=2, sticky="w", pady=2)
+
+        ttk.Checkbutton(sec_kart, text=t("ham_kullan"), variable=self.ham).grid(row=1, column=0, sticky="w", pady=2)
+        ttk.Checkbutton(sec_kart, text=t("devam"), variable=self.devam).grid(row=1, column=1, sticky="w", pady=2)
+        ttk.Checkbutton(sec_kart, text=t("hizli"), variable=self.hizli).grid(row=1, column=2, sticky="w", pady=2)
+
+        ttk.Checkbutton(sec_kart, text=t("tekrar"), variable=self.tekrar).grid(row=2, column=0, sticky="w", pady=2)
+        ttk.Checkbutton(sec_kart, text=t("verimsiz"), variable=self.verimsiz).grid(row=2, column=1, sticky="w", pady=2)
+
+        p_kutu = ttk.Frame(sec_kart, style="Card.TFrame")
+        p_kutu.grid(row=2, column=2, sticky="w", pady=2)
+        ttk.Label(p_kutu, text=t("paralel"), style="Card.TLabel").pack(side="left", padx=(0, 6))
+        ttk.Spinbox(p_kutu, from_=1, to=3, width=4, textvariable=self.paralel).pack(side="left")
+
+        # ── 5. İŞLEM VE ÇIKTI BUTONLARI (2 AYRI SATIR, HİÇBİR BUTON GİZLENMEZ) ──
+        aksiyon_bar = ttk.Frame(ana)
+        aksiyon_bar.grid(row=4, column=0, sticky="ew", pady=(2, 6))
+
+        self.baslat = ttk.Button(aksiyon_bar, text=t("baslat"), style="Start.TButton", command=self.baslat_tikla)
         self.baslat.pack(side="left")
-        self.dur = ttk.Button(dugmeler, text=t("durdur"), command=self.durdur.set, state="disabled")
-        self.dur.pack(side="left", padx=8)
-        self.havuz_sifirla = ttk.Button(dugmeler, text=t("havuz_sifirla"), command=self.havuz_temizle)
-        self.havuz_sifirla.pack(side="left", padx=(24, 0))
-        self.manuel_btn = ttk.Button(dugmeler, text=t("manuel_ekle"), command=self.manuel_penceresi)
-        self.manuel_btn.pack(side="left", padx=(8, 0))
+        self.dur = ttk.Button(aksiyon_bar, text=t("durdur"), style="Stop.TButton", command=self.durdur.set, state="disabled")
+        self.dur.pack(side="left", padx=(8, 16))
 
-        self.klasor_btn = ttk.Button(dugmeler, text=t("klasor_ac"), command=lambda: self.ac("klasor"), state="disabled")
+        self.esik_btn = ttk.Button(aksiyon_bar, text=t("kategori_esikleri"), command=self.kategori_esikleri_penceresi)
+        self.esik_btn.pack(side="left", padx=(0, 8))
+        self.manuel_btn = ttk.Button(aksiyon_bar, text=t("manuel_ekle"), command=self.manuel_penceresi)
+        self.manuel_btn.pack(side="left", padx=(0, 8))
+        self.havuz_sifirla = ttk.Button(aksiyon_bar, text=t("havuz_sifirla"), command=self.havuz_temizle)
+        self.havuz_sifirla.pack(side="left")
+
+        cikti_kart = ttk.LabelFrame(ana, text=f"  {t('cikti_grup')}  ", padding=(12, 8))
+        cikti_kart.grid(row=5, column=0, sticky="ew", pady=(0, 8))
+
+        self.rehber = ttk.Button(cikti_kart, text=t("ilce_rehberi"), style="Primary.TButton", command=lambda: self.ac("html"), state="disabled")
+        self.rehber.pack(side="left", padx=(0, 6))
+        self.rehber_sade = ttk.Button(cikti_kart, text=t("sade_rehberi"), style="Primary.TButton", command=lambda: self.ac("html_sade"), state="disabled")
+        self.rehber_sade.pack(side="left", padx=(0, 12))
+
+        self.hepsi_rehber = ttk.Button(cikti_kart, text=t("hepsi_rehberi"), command=lambda: self.ac("hepsi_html"))
+        self.hepsi_rehber.pack(side="left", padx=(0, 6))
+        self.hepsi_sade = ttk.Button(cikti_kart, text=t("hepsi_sade_rehberi"), command=lambda: self.ac("hepsi_html_sade"))
+        self.hepsi_sade.pack(side="left", padx=(0, 12))
+
+        self.klasor_btn = ttk.Button(cikti_kart, text=t("klasor_ac"), command=lambda: self.ac("klasor"), state="disabled")
         self.klasor_btn.pack(side="right")
-        self.excel = ttk.Button(dugmeler, text=t("excel_ac"), command=lambda: self.ac("xlsx"), state="disabled")
-        self.excel.pack(side="right", padx=(0, 8))
-        self.json_btn = ttk.Button(dugmeler, text=t("json_btn"), command=self.json_disari_aktar, state="disabled")
-        self.json_btn.pack(side="right", padx=(0, 8))
-        self.kml_btn = ttk.Button(dugmeler, text=t("kml_btn"), command=lambda: self.ac("kml"), state="disabled")
-        self.kml_btn.pack(side="right", padx=(0, 8))
-        self.rehber = ttk.Button(dugmeler, text=t("ilce_rehberi"), command=lambda: self.ac("html"), state="disabled")
-        self.rehber.pack(side="right", padx=(0, 8))
-        self.hepsi_rehber = ttk.Button(dugmeler, text=t("hepsi_rehberi"), command=lambda: self.ac("hepsi_html"))
-        self.hepsi_rehber.pack(side="right", padx=(0, 8))
-        self.esik_btn = ttk.Button(dugmeler, text=t("kategori_esikleri"), command=self.kategori_esikleri_penceresi)
-        self.esik_btn.pack(side="left", padx=(8, 0))
+        self.excel = ttk.Button(cikti_kart, text=t("excel_ac"), command=lambda: self.ac("xlsx"), state="disabled")
+        self.excel.pack(side="right", padx=(0, 6))
+        self.json_btn = ttk.Button(cikti_kart, text=t("json_btn"), command=self.json_disari_aktar, state="disabled")
+        self.json_btn.pack(side="right", padx=(0, 6))
+        self.kml_btn = ttk.Button(cikti_kart, text=t("kml_btn"), command=lambda: self.ac("kml"), state="disabled")
+        self.kml_btn.pack(side="right", padx=(0, 6))
 
-        profil_frame = ttk.Frame(f)
-        profil_frame.grid(row=19, column=0, columnspan=2, sticky="ew", pady=(0, 5))
-        ttk.Button(profil_frame, text=t("profil_kaydet"), command=self.profil_kaydet).pack(side="left")
-        ttk.Button(profil_frame, text=t("profil_yukle"), command=self.profil_yukle).pack(side="left", padx=8)
+        # ── 6. İLERLEME ÇUBUĞU VE KONSOL EKRANI ──
+        self.cubuk = ttk.Progressbar(ana, mode="determinate", style="Horizontal.TProgressbar")
+        self.cubuk.grid(row=6, column=0, sticky="ew", pady=(2, 4))
 
-        self.cubuk = ttk.Progressbar(f, mode="determinate")
-        self.cubuk.grid(row=20, column=0, columnspan=2, sticky="ew")
-        self.sure = ttk.Label(f, text=t("sure"), font=("Segoe UI", 10, "bold"))
-        self.sure.grid(row=21, column=0, columnspan=2, sticky="w", pady=(6, 0))
-        self.gunluk = tk.Text(f, height=10, state="disabled", wrap="word")
-        self.gunluk.grid(row=22, column=0, columnspan=2, sticky="nsew", pady=(4, 0))
-        f.rowconfigure(22, weight=1)
+        self.sure = ttk.Label(ana, text=t("sure"), style="Status.TLabel")
+        self.sure.grid(row=7, column=0, sticky="w", pady=(0, 4))
+
+        log_cerceve = ttk.Frame(ana)
+        log_cerceve.grid(row=8, column=0, sticky="nsew")
+        log_cerceve.columnconfigure(0, weight=1)
+        log_cerceve.rowconfigure(0, weight=1)
+        ana.rowconfigure(8, weight=1)
+
+        self.gunluk = tk.Text(
+            log_cerceve,
+            height=9,
+            state="disabled",
+            wrap="word",
+            bg="#1e293b",
+            fg="#e2e8f0",
+            insertbackground="#ffffff",
+            selectbackground="#3b82f6",
+            font=("Consolas", 9),
+            relief="flat",
+            padx=10,
+            pady=8,
+        )
+        self.gunluk.grid(row=0, column=0, sticky="nsew")
+        log_sb = ttk.Scrollbar(log_cerceve, orient="vertical", command=self.gunluk.yview)
+        log_sb.grid(row=0, column=1, sticky="ns")
+        self.gunluk.configure(yscrollcommand=log_sb.set)
+
         self.yaz(t("hazir"))
         self.yaz(t("ipucu"))
         kok.after(200, self.kuyruk_oku)
@@ -535,7 +687,7 @@ class Pencere:
             a = veri
 
         global _aktif_dil
-        dil_deger = a.get("dil", "en")
+        dil_deger = a.get("dil", "tr")
         self.dil.set(dil_deger)
         dil_ayarla(dil_deger)
 
@@ -543,8 +695,8 @@ class Pencere:
         self.ilce.set(a.get("ilce", self.ilce.get()))
         self.mahalle.set(a.get("mahalle", ""))
         self.yaricap.set(a.get("yaricap", ""))
-        self.puan.set(a.get("puan", "4.0"))
-        self.oy.set(a.get("oy", "50"))
+        self.puan.set(a.get("puan", "0"))
+        self.oy.set(a.get("oy", "0"))
         self.ozel_arama.set(a.get("ozel_arama", ""))
         self.mahalle_bul.set(a.get("mahalle_bul", True))
         self.goster.set(a.get("goster", True))
@@ -716,7 +868,7 @@ class Pencere:
             self.yaz("Kategori eşikleri kaydedildi.")
             pen.destroy()
 
-        ttk.Button(alt, text="Kaydet", command=kaydet).pack(side="left")
+        ttk.Button(alt, text="Kaydet", style="Start.TButton", command=kaydet).pack(side="left")
         ttk.Button(alt, text="Varsayılana Dön", command=lambda: self._kategori_esikleri_varsayilana_don(satirlar)).pack(side="left", padx=8)
         ttk.Button(alt, text="Kapat", command=pen.destroy).pack(side="right")
 
@@ -785,7 +937,7 @@ class Pencere:
                     self.dur.configure(state="disabled")
                     self.t0 = None
                     if self.ozet:
-                        for d in (self.excel, self.rehber, self.json_btn, self.kml_btn, self.klasor_btn):
+                        for d in (self.excel, self.rehber, self.rehber_sade, self.json_btn, self.kml_btn, self.klasor_btn):
                             d.configure(state="normal")
         except queue.Empty:
             pass
@@ -845,7 +997,7 @@ class Pencere:
         self.sure.configure(text="Elapsed: 0s" if dil_al() == "en" else "Geçen süre: 0 sn")
         self.sure_tikla()
         self.cubuk.configure(value=0)
-        for d in (self.excel, self.rehber, self.json_btn, self.kml_btn, self.klasor_btn):
+        for d in (self.excel, self.rehber, self.rehber_sade, self.json_btn, self.kml_btn, self.klasor_btn):
             d.configure(state="disabled")
         self.baslat.configure(state="disabled")
         self.dur.configure(state="normal")
@@ -1032,7 +1184,7 @@ class Pencere:
         self.yaz(f"Yeni: {ozet['yeni']}  |  Güncellenen: {ozet['guncellenen']}  |  Bu ilçede artık görünmeyen: {ozet.get('kayip', 0)}")
         if ozet["adet"] == 0:
             self.yaz("Sonuç çıkmadı. Puanı ya da yorum sayısını düşürmeyi dene.")
-        for d in (self.excel, self.rehber, self.json_btn, self.kml_btn, self.klasor_btn):
+        for d in (self.excel, self.rehber, self.rehber_sade, self.json_btn, self.kml_btn, self.klasor_btn):
             d.configure(state="normal")
         messagebox.showinfo(
             "📡 Local Radar · Tarama tamamlandı",
@@ -1088,7 +1240,7 @@ class Pencere:
 
         dg = ttk.Frame(pen)
         dg.grid(row=len(alanlar) + 1, column=0, columnspan=2, pady=10)
-        ttk.Button(dg, text="Kaydet ve rehberi yenile", command=kaydet).pack(side="left", padx=6)
+        ttk.Button(dg, text="Kaydet ve rehberi yenile", style="Start.TButton", command=kaydet).pack(side="left", padx=6)
         ttk.Button(dg, text="Vazgeç", command=pen.destroy).pack(side="left", padx=6)
 
     def havuz_temizle(self):
@@ -1098,7 +1250,7 @@ class Pencere:
             return
         silinen = []
         for yol in ("pool.json", "local_radar_all.csv", "local_radar_all.xlsx",
-                    "local_radar_all.kml", "local_radar_all.html", "local_radar_all.json"):
+                    "local_radar_all.kml", "local_radar_all.html", "local_radar_all_sade.html", "local_radar_all.json"):
             if os.path.exists(yol):
                 try:
                     os.remove(yol)
@@ -1111,13 +1263,15 @@ class Pencere:
         if not self.ozet:
             if tur == "hepsi_html" and os.path.exists("local_radar_all.html"):
                 webbrowser.open(pathlib.Path(os.path.abspath("local_radar_all.html")).as_uri())
+            elif tur == "hepsi_html_sade" and os.path.exists("local_radar_all_sade.html"):
+                webbrowser.open(pathlib.Path(os.path.abspath("local_radar_all_sade.html")).as_uri())
             return
 
         yol = self.ozet.get(tur)
         if not yol or not os.path.exists(yol):
             return
 
-        if tur in ("html", "hepsi_html"):
+        if tur in ("html", "html_sade", "hepsi_html", "hepsi_html_sade"):
             webbrowser.open(pathlib.Path(yol).as_uri())
         elif tur == "kml":
             if hasattr(os, "startfile"):

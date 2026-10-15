@@ -13,8 +13,8 @@ import re, csv, math, time, json, os, urllib.request, urllib.parse, urllib.error
 
 # ======================= SETTINGS =======================
 SECIM = "nizip"
-MIN_PUAN = 4.0
-MIN_OY = 50
+MIN_PUAN = 0
+MIN_OY = 0
 EKRANDA_GOSTER = True
 MAHALLE_BUL = True
 IZGARA_AKTIF = True
@@ -51,6 +51,7 @@ DOSYA_HEPSI_CSV = "local_radar_all.csv"
 DOSYA_HEPSI_XLSX = "local_radar_all.xlsx"
 DOSYA_HEPSI_JSON = "local_radar_all.json"
 DOSYA_HEPSI_HTML = "local_radar_all.html"
+DOSYA_HEPSI_HTML_SADE = "local_radar_all_sade.html"
 DOSYA_HEPSI_KML = "local_radar_all.kml"
 
 DOSYA_HAM_PREFIX = "raw_"
@@ -176,65 +177,89 @@ MODLAR = {
     "Kapsamlı (her şey, ızgaralı)":      dict(kategoriler=TUMU, izgara=True),
 }
 
-# ---------- Categorization rules (v1.0.0) ----------
+# ---------- Categorization rules (v1.1.0 - Priority & Domain Ordered) ----------
 KURALLAR = [
+    # 1. Spesifik İstisnalar (Kale Kilit, Cam Balkon, Halı Mağazası, İletişim, Hırdavat vb.)
     ("Alışveriş", "Giyim, Teknoloji, Mağaza",
      ["kale cam", "kale balkon", "kale kapı", "kale cam balkon",
-      "cam balkon", "pvc", "alüminyum doğrama", "doğrama"]),
+      "cam balkon", "pvc", "alüminyum doğrama", "doğrama", "kale kilit", "çilingir", "anahtarcı",
+      "hırdavat", "nalbur", "mobilya", "furniture", "halı mağaza", "fıstık halı", "fıstıkçılar halı",
+      "güvenlik sistem", "kamera", "alarm", "elektrik", "elektirik",
+      "iletişim merkezi", "turkcell", "vodafone", "türk telekom"]),
     ("Alışveriş", "Giyim, Teknoloji, Mağaza",
      ["giyim çarşı", "giyim çarşısı", "giyim mağaza", "ayakkabı çarşı",
       "tekstil çarşı", "kuyumcu çarşı"]),
-    ("Diğer", "Diğer hizmetler", ["internet", "halı yıka", "halı temiz"]),
+    ("Diğer", "Diğer hizmetler",
+     ["internet", "halı yıka", "halı temiz", "emlak", "gayrimenkul", "mezar", "kefalet", "kooperatif"]),
+
+    # 2. Ulaşım ve Araç ("Oto Lastik Dükkanı" -> dükkan'a düşmeden önce yakalanır)
+    ("Diğer", "Ulaşım ve Araç",
+     ["otopark", "benzin", "petrol", "akaryakıt", "otogaz", "=shell", "=opet", "=bp", "bpet",
+      "aytemiz", "alpet", "kadoil", "hypco", "sunpet", "=oto", "tamir", "lastik", "çekici",
+      "vinç", "yol yardım", "yolyardım", "araç bakım", "araba yıkama", "oto yıkama",
+      "kurtar", "otogar", "akü"]),
+
+    # 3. Camiler ve Sağlık & Bakım
+    ("Gezilecek yerler", "Camiler", ["cami", "camii", "mescit", "mescidi"]),
+    ("Diğer", "Sağlık ve Bakım",
+     ["=diş", "ortodonti", "veteriner", "klinik", "clinic", "poliklinik", "hastane", "eczane",
+      "doktor", "=dr", "hekim", "sağlık", "medikal", "ortopedi", "diyetisyen", "fizik tedavi", "optik",
+      "fitness", "spor salonu", "spor kulübü", "spor klubu", "gym", "kickboks", "fight",
+      "voleybol", "basketbol", "yüzme", "kuaför", "berber", "barber", "güzellik", "beauty",
+      "lazer", "epilasyon", "cilt bakım", "=salon", "=saloon"]),
+
+    # 4. Yemek (Önce spesifik mutfaklar, en son genel Restoran/Lokanta)
     ("Kebap & Et", "Kebap",
-     ["kebap", "kebab", "ciğer", "ciger", "dürüm", "döner", "iskender", "köfteci"]),
-    ("Restoran", "Restoran",
-     ["restoran", "restaurant", "lokanta", "ev yemek", "balık", "sofra",
-      "nohutçu", "kelle paça", "beyran"]),
-    ("Hızlı Atıştırmalık", "Hızlı",
-     ["pide", "lahmacun", "tost", "börek", "çorba", "=paça", "kelle", "nohut",
-      "pizza", "burger", "fast food", "sandviç", "çiğ köf", "tantuni"]),
+     ["kebap", "kebab", "ciğer", "ciger", "dürüm", "döner", "iskender", "köfteci",
+      "ocakbaşı", "mangal", "kavurma", "et lokantası"]),
     ("Tatlı & Pastane", "Tatlı",
      ["baklava", "künefe", "kadayıf", "dondurma", "tatlı", "pastane", "pasta",
       "katmer", "lokum", "helva", "çikolata", "waffle"]),
+    ("Hızlı Atıştırmalık", "Hızlı",
+     ["pide", "lahmacun", "tost", "börek", "çorba", "=paça", "kelle", "nohut",
+      "pizza", "burger", "fast food", "sandviç", "çiğ köf", "tantuni", "büfe"]),
     ("Kafe & Kahvaltı", "Kafe",
      ["cafe", "kafe", "kahve", "coffee", "=çay", "nargile", "kahvaltı",
-      "simit", "bistro"]),
-    ("Alışveriş", "Market, Fırın, Kasap",
-     ["fıstık", "fırın", "unlu", "ekmek", "market", "migros", "carrefour",
-      "=avm", "=bim", "=şok", "=a101", "kasap", "manav", "kuruyemiş",
-      "gıda", "pazar", "süpermarket"]),
-    ("Alışveriş", "Giyim, Teknoloji, Mağaza",
-     ["giyim", "ayakkabı", "teknoloji", "elektronik", "telefon mağaza",
-      "bilgisayar", "mağaza", "boyner", "lc waikiki", "defacto",
-      "teknosa", "vatan bilgisayar", "kuyumc", "kozmetik", "kırtasiye",
-      "kitap", "kitab", "gelinlik", "dükkan"]),
-    ("Diğer", "Sağlık ve Bakım",
-     ["=diş", "veteriner", "klinik", "hastane", "eczane", "doktor", "hekim",
-      "fitness", "spor salonu", "kuaför", "berber", "güzellik"]),
-    ("Diğer", "Ulaşım ve Araç",
-     ["otopark", "benzin", "petrol", "=shell", "=opet", "=bp", "=oto", "tamir",
-      "lastik", "çekici", "vinç", "yol yardım", "araç bakım", "araba yıkama",
-      "kurtar", "otogar"]),
-    ("Diğer", "Konaklama",
-     ["otel", "konaklama", "pansiyon", "apart", "=hostel", "konukevi", "konuk evi"]),
-    ("Diğer", "Banka ve ATM",
-     ["banka", "=atm", "ziraat", "=garanti", "halkbank", "vakıfbank", "akbank",
-      "yapı kredi", "=qnb"]),
+      "simit", "bistro", "كافتريا"]),
+    ("Restoran", "Restoran",
+     ["restoran", "restaurant", "lokanta", "ev yemek", "balık", "sofra",
+      "nohutçu", "kelle paça", "beyran", "dinlenme tesisi", "tesisleri"]),
+
+    # 5. Kargo, Banka, Konaklama, Evcil Hayvan, Çiçekçi, Düğün & Organizasyon
     ("Diğer", "Kargo ve Posta",
-     ["kargo", "=ptt", "yurtiçi", "=aras", "=mng", "sürat"]),
+     ["kargo", "=ptt", "yurtiçi", "=aras", "=mng", "sürat", "=dhl", "=ups", "postane"]),
+    ("Diğer", "Banka ve ATM",
+     ["banka", "=bank", "=atm", "bankamatik", "ziraat", "=garanti", "halkbank", "vakıfbank", "akbank",
+      "yapı kredi", "=qnb", "denizbank", "kuveyt türk", "=teb", "iş bankası", "is bankasi"]),
+    ("Diğer", "Konaklama",
+     ["otel", "konaklama", "pansiyon", "apart", "=hostel", "konukevi", "konuk evi",
+      "öğretmenevi", "öğretmen evi", "uygulama oteli"]),
     ("Diğer", "Evcil Hayvan", ["petshop", "pet shop", "evcil"]),
-    ("Diğer", "Çiçekçi", ["çiçek", "flower"]),
-    ("Diğer", "Diğer hizmetler", ["düğün", "nikah"]),
-    ("Gezilecek yerler", "Camiler", ["cami", "mescit"]),
+    ("Diğer", "Çiçekçi", ["çiçekçi", "çiçekcilik", "çiçekçilik", "çiçekevi", "çiçek evi", "flower"]),
+    ("Diğer", "Düğün ve Organizasyon",
+     ["düğün", "dugun", "nikah", "organizasyon", "davet evi", "kır düğün", "kır düğünü", "plaza", "garden"]),
+
+    # 6. Gezilecek yerler (Kamp alanı / Su kenarı Fıstık'tan önce yakalanır)
     ("Gezilecek yerler", "Eğlence ve Sanat",
      ["eğlence", "=oyun", "game center", "sinema", "tiyatro",
-      "sanat galeri", "sanat merkezi"]),
+      "sanat galeri", "sanat merkezi", "kültür merkezi"]),
     ("Gezilecek yerler", "Gezi ve doğa",
      ["turistik", "antik", "müze", "seyir", "kamp", "millet bahçesi",
       "tarihi", "=kale", "=kalesi", "park", "şelale", "mağara", "ören",
       "plaj", "piknik", "mesire", "hamam", "tarihi çarşı", "bedesten",
       "kapalı çarşı", "kilise", "sinagog", "kervansaray", "mozaik",
-      "anıt", "=han", "=hanı"]),
+      "anıt", "=han", "=hanı", "tapınağı", "tapınak", "su kenarı", "bügeti"]),
+
+    # 7. Alışveriş (Genel Market ve Mağaza kelimeleri en sonda)
+    ("Alışveriş", "Market, Fırın, Kasap",
+     ["fıstık", "fırın", "unlu", "ekmek", "market", "migros", "carrefour",
+      "=avm", "alışveriş merkezi", "gross", "=bim", "=şok", "=a101", "a-101", "a.101",
+      "kasap", "manav", "kuruyemiş", "baharat", "gıda", "süpermarket", "toptan", "bakkal"]),
+    ("Alışveriş", "Giyim, Teknoloji, Mağaza",
+     ["giyim", "ayakkabı", "teknoloji", "elektronik", "telefon mağaza", "=gsm",
+      "bilgisayar", "mağaza", "boyner", "lc waikiki", "defacto", "fulla", "outlet",
+      "teknosa", "vatan bilgisayar", "kuyumc", "pırlanta", "döviz", "kozmetik", "kırtasiye", "kirtasiye",
+      "kitap", "kitab", "oyuncak", "gelinlik", "çeyiz", "dükkan"]),
 ]
 
 ANA = {"Kebap & Et": "Yemek", "Restoran": "Yemek", "Hızlı Atıştırmalık": "Yemek",
@@ -269,25 +294,32 @@ for _b, _g, _ in KURALLAR:
     if _alt not in ALT_SIRA[ANA[_b]]:
         ALT_SIRA[ANA[_b]].append(_alt)
 
+ALT_SIRA["Yemek"] = ["Kebap & Et", "Restoran", "Hızlı Atıştırmalık", "Tatlı & Pastane", "Kafe & Kahvaltı"]
 ALT_SIRA["Gezilecek yerler"] = ["Gezi ve doğa", "Camiler", "Eğlence ve Sanat"]
+ALT_SIRA["Alışveriş"] = ["Market, Fırın, Kasap", "Giyim, Teknoloji, Mağaza"]
+ALT_SIRA["Diğer"] = ["Sağlık ve Bakım", "Ulaşım ve Araç", "Konaklama", "Banka ve ATM",
+                     "Kargo ve Posta", "Düğün ve Organizasyon", "Çiçekçi", "Evcil Hayvan", "Diğer hizmetler"]
 
 VARSAYILAN_ESIKLER = {
-    "Kebap & Et": {"puan": 4.0, "oy": 50, "puansiz": False},
-    "Restoran": {"puan": 4.0, "oy": 50, "puansiz": False},
-    "Hızlı Atıştırmalık": {"puan": 4.0, "oy": 50, "puansiz": False},
-    "Tatlı & Pastane": {"puan": 4.0, "oy": 50, "puansiz": False},
-    "Kafe & Kahvaltı": {"puan": 4.0, "oy": 50, "puansiz": False},
-    "Gezilecek yerler": {"puan": 3.8, "oy": 30, "puansiz": False},
-    "Eğlence ve Sanat": {"puan": 3.8, "oy": 30, "puansiz": False},
-    "Camiler": {"puan": 3.5, "oy": 10, "puansiz": False},
-    "Konaklama": {"puan": 4.0, "oy": 30, "puansiz": False},
-    "Market, Fırın, Kasap": {"puan": 3.5, "oy": 10, "puansiz": False},
-    "Giyim, Teknoloji, Mağaza": {"puan": 3.5, "oy": 10, "puansiz": False},
-    "Sağlık ve Bakım": {"puan": 3.5, "oy": 10, "puansiz": False},
-    "Çiçekçi": {"puan": 3.5, "oy": 10, "puansiz": False},
-    "Ulaşım ve Araç": {"puan": 3.5, "oy": 10, "puansiz": False},
+    "Kebap & Et": {"puan": 0.0, "oy": 0, "puansiz": True},
+    "Restoran": {"puan": 0.0, "oy": 0, "puansiz": True},
+    "Hızlı Atıştırmalık": {"puan": 0.0, "oy": 0, "puansiz": True},
+    "Tatlı & Pastane": {"puan": 0.0, "oy": 0, "puansiz": True},
+    "Kafe & Kahvaltı": {"puan": 0.0, "oy": 0, "puansiz": True},
+    "Gezilecek yerler": {"puan": 0.0, "oy": 0, "puansiz": True},
+    "Eğlence ve Sanat": {"puan": 0.0, "oy": 0, "puansiz": True},
+    "Camiler": {"puan": 0.0, "oy": 0, "puansiz": True},
+    "Konaklama": {"puan": 0.0, "oy": 0, "puansiz": True},
+    "Market, Fırın, Kasap": {"puan": 0.0, "oy": 0, "puansiz": True},
+    "Giyim, Teknoloji, Mağaza": {"puan": 0.0, "oy": 0, "puansiz": True},
+    "Sağlık ve Bakım": {"puan": 0.0, "oy": 0, "puansiz": True},
+    "Düğün ve Organizasyon": {"puan": 0.0, "oy": 0, "puansiz": True},
+    "Çiçekçi": {"puan": 0.0, "oy": 0, "puansiz": True},
+    "Ulaşım ve Araç": {"puan": 0.0, "oy": 0, "puansiz": True},
     "Banka ve ATM": {"puan": 0.0, "oy": 0, "puansiz": True},
     "Kargo ve Posta": {"puan": 0.0, "oy": 0, "puansiz": True},
+    "Evcil Hayvan": {"puan": 0.0, "oy": 0, "puansiz": True},
+    "Diğer hizmetler": {"puan": 0.0, "oy": 0, "puansiz": True},
 }
 
 KATEGORI_ESIKLERI = {k: dict(v) for k, v in VARSAYILAN_ESIKLER.items()}
@@ -396,6 +428,8 @@ def _cikti_satiri(r):
 
 
 def siniflandir(ad, tur, fiyat):
+    if GURULTU.search(fold(tur or "")):
+        tur = ""
     m = fold(ad + " " + tur)
     kelimeler = set(re.findall(r"[a-z0-9]+", m))
     for bolum, grup, kws in KURALLAR:
@@ -404,12 +438,8 @@ def siniflandir(ad, tur, fiyat):
                 if k[1:] in kelimeler:
                     return bolum, grup
             else:
-                if " " in k:
-                    if k in m:
-                        return bolum, grup
-                else:
-                    if k in m:
-                        return bolum, grup
+                if k in m:
+                    return bolum, grup
     if fiyat:
         return "Restoran", "Restoran"
     return "Diğer", "Diğer hizmetler"
@@ -513,8 +543,9 @@ def mesafe_km(a, b):
     return 2 * 6371 * math.asin(math.sqrt(h))
 
 
-GURULTU = re.compile(r"^(acik|kapali|kapanis|acilis|yemek yerinde|paket|kapida|siparis|"
-                     r"rezervasyon|gel-al|teslimat|saat)|\(0\d|saati|^[0-9a-z]{4}\+[0-9a-z]{2,}")
+GURULTU = re.compile(
+    r"^(acik|kapali|kapanis|kapanmak uzere|acilis|24 saat acik|yemek yerinde|paket|kapida|siparis|"
+    r"rezervasyon|gel-al|teslimat|saat)|\(0\d|^(?:\+?90[\s-]?)?0?[2-58]\d{2}[\s-]?\d{3}|^444[\s-]?\d{4}|saati|^\d{1,2}:\d{2}$|^[0-9a-z]{4}\+[0-9a-z]{2,}")
 ADRES = re.compile(r"\d|\b(sk|sok|cd|cad|blv|bulvar|mah|caddesi|sokak)\b")
 
 
@@ -851,7 +882,7 @@ def _yeni_mi(tarih):
         return False
 
 
-def html_yaz(kayitlar, ayar, yol):
+def html_yaz(kayitlar, ayar, yol, sade=False):
     ogeler = []
     for r in kayitlar:
         ana = ANA.get(r["Bölüm"], "Diğer")
@@ -868,7 +899,8 @@ def html_yaz(kayitlar, ayar, yol):
     alt = "Scan, discover, plan. Google Maps results filtered and organized by Local Radar."
     tarih = time.strftime("%d.%m.%Y")
 
-    sayfa = (SABLON.replace("__DATA__", json.dumps(veri, ensure_ascii=False).replace("</", "<\\/"))
+    sablon = SABLON_SADE if sade else SABLON
+    sayfa = (sablon.replace("__DATA__", json.dumps(veri, ensure_ascii=False).replace("</", "<\\/"))
              .replace("__BASLIK__", ayar["baslik"])
              .replace("__ALT__", alt)
              .replace("__TARIH__", tarih))
@@ -1881,6 +1913,7 @@ def hepsi_yenile(ayar=None):
     xlsx_yaz(hepsi, DOSYA_HEPSI_XLSX, HAVUZ_ALANLAR)
     json_yaz(hepsi, DOSYA_HEPSI_JSON, HAVUZ_ALANLAR)
     html_yaz(hepsi, a2, DOSYA_HEPSI_HTML)
+    html_yaz(hepsi, a2, DOSYA_HEPSI_HTML_SADE, sade=True)
     kml_yaz(hepsi, DOSYA_HEPSI_KML)
     return len(hepsi)
 
@@ -1930,16 +1963,19 @@ def calistir(ayar, ilerleme=lambda i, n, m: print(f"[{i}/{n}] {m}"), durdur=lamb
     csv_yolu = os.path.join(klasor, f"{slug}_places.csv")
     xlsx_yolu = os.path.join(klasor, f"{slug}_places.xlsx")
     html_yolu = os.path.join(klasor, f"{slug}_guide.html")
+    html_sade_yolu = os.path.join(klasor, f"{slug}_guide_sade.html")
     kml_yolu = os.path.join(klasor, f"{slug}_places.kml")
     csv_yaz(kayitlar, csv_yolu, HAVUZ_ALANLAR)
     xlsx_yaz(kayitlar, xlsx_yolu, HAVUZ_ALANLAR)
     json_yolu = os.path.join(klasor, f"{slug}_places.json")
     html_yaz(kayitlar, ayar, html_yolu)
+    html_yaz(kayitlar, ayar, html_sade_yolu, sade=True)
     json_yaz(kayitlar, json_yolu, HAVUZ_ALANLAR)
     kml_yaz(kayitlar, kml_yolu)
 
     ozet = {"csv": os.path.abspath(csv_yolu), "xlsx": os.path.abspath(xlsx_yolu),
-            "json": os.path.abspath(json_yolu), "html": os.path.abspath(html_yolu), "kml": os.path.abspath(kml_yolu),
+            "json": os.path.abspath(json_yolu), "html": os.path.abspath(html_yolu),
+            "html_sade": os.path.abspath(html_sade_yolu), "kml": os.path.abspath(kml_yolu),
             "ham": os.path.abspath(ham_yolu), "klasor": os.path.abspath(klasor),
             "okunan": len(tum), "puansiz": puansiz, "adet": len(kayitlar),
             "yeni": yeni, "guncellenen": guncellenen, "kayip": kayip}
@@ -1954,11 +1990,13 @@ def calistir(ayar, ilerleme=lambda i, n, m: print(f"[{i}/{n}] {m}"), durdur=lamb
         xlsx_yaz(hepsi, DOSYA_HEPSI_XLSX, HAVUZ_ALANLAR)
         json_yaz(hepsi, DOSYA_HEPSI_JSON, HAVUZ_ALANLAR)
         html_yaz(hepsi, a2, DOSYA_HEPSI_HTML)
+        html_yaz(hepsi, a2, DOSYA_HEPSI_HTML_SADE, sade=True)
         kml_yaz(hepsi, DOSYA_HEPSI_KML)
         ozet.update(hepsi_csv=os.path.abspath(DOSYA_HEPSI_CSV),
                     hepsi_xlsx=os.path.abspath(DOSYA_HEPSI_XLSX),
                     hepsi_json=os.path.abspath(DOSYA_HEPSI_JSON),
                     hepsi_html=os.path.abspath(DOSYA_HEPSI_HTML),
+                    hepsi_html_sade=os.path.abspath(DOSYA_HEPSI_HTML_SADE),
                     hepsi_kml=os.path.abspath(DOSYA_HEPSI_KML), toplam=len(hepsi))
 
     return ozet
@@ -2188,7 +2226,7 @@ function ok(x){
   const t=tl(q.value.trim()),p0=parseFloat(mp.value)||0,y0=parseInt(my.value,10)||0;
   const gunKosul=(aktifGun==='')||(gunDurum[x.l]==aktifGun);
   return (!ic.value||x.c===ic.value)&&(!mh.value||(x.c+'|'+x.m)===mh.value)&&
-    (!t||tl(x.n+' '+x.t).includes(t))&&parseFloat(x.p.replace(',','.'))>=p0&&x.y>=y0&&
+    (!t||tl(x.n+' '+x.t).includes(t))&&(p0===0&&y0===0&&x.u ? true : (parseFloat(x.p.replace(',','.'))>=p0&&(x.y||0)>=y0))&&
     (gs.value===''||(gs.value==='fav'&&(durum[x.l]||{}).fav)||(gs.value==='gitmedi'&&!(durum[x.l]||{}).gitti)||(gs.value==='gunlu'&&gunDurum[x.l]))&&
     gunKosul;
 }
@@ -2405,6 +2443,271 @@ mahalleListe();
 gunFiltreOlustur();
 draw();
 butceGuncelle();
+</script></body></html>
+"""
+
+
+SABLON_SADE = r"""<!DOCTYPE html>
+<html lang="tr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>__BASLIK__</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{--bg:#f8f9fa;--card:#fff;--ink:#202124;--mut:#5f6368;--line:#dadce0;--primary:#1a73e8;--primarybg:#e8f0fe;--gold:#f29900;--yesil:#0b8043}
+@media (prefers-color-scheme:dark){:root{--bg:#202124;--card:#2d2e31;--ink:#e8eaed;--mut:#9aa0a6;--line:#3c4043;--primary:#8ab4f8;--primarybg:#303134;--gold:#fbbc04;--yesil:#81c995}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.4;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.wrap{max-width:640px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:28px;font-weight:800;margin:8px 0 4px;letter-spacing:-.02em}
+.sub{color:var(--mut);font-size:14px;margin:0 0 12px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:500}
+.tabs button{flex:0 0 auto;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-weight:600;padding:9px 16px;border-radius:99px;cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--primary);border-color:var(--primary);color:#fff}
+.chips{display:flex;gap:6px;flex-wrap:wrap;padding:2px 0 10px}
+.chips button{flex:0 0 auto;border:1px solid var(--line);background:transparent;color:var(--mut);font:inherit;font-size:13px;padding:5px 12px;border-radius:99px;cursor:pointer}
+.chips button[aria-pressed="true"]{background:var(--primarybg);border-color:var(--primary);color:var(--primary);font-weight:600}
+@media (prefers-color-scheme:dark){.tabs button[aria-selected="true"]{color:#202124}}
+input,select{width:100%;font:inherit;padding:11px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);margin:6px 0 4px}
+input:focus,select:focus{outline:2px solid var(--primary);border-color:transparent}
+.f-row{display:flex;gap:12px;margin:8px 0 4px}
+.f-row div{flex:1}
+.f-row label{display:block;font-size:12px;color:var(--mut);margin:0 0 4px 4px;font-weight:600}
+h2{font-size:16px;margin:22px 0 8px;font-weight:700;color:var(--primary);border-bottom:1px solid var(--line);padding-bottom:4px}
+.row{display:flex;gap:12px;align-items:flex-start;background:var(--card);border-bottom:1px solid var(--line);padding:12px}
+.row:first-of-type{border-radius:14px 14px 0 0}.row:last-child{border-radius:0 0 14px 14px;border-bottom:0}.row:only-child{border-radius:14px}
+.pt{flex:0 0 46px;text-align:center;background:var(--primarybg);border-radius:10px;padding:6px 0}
+.pt b{display:block;font-size:18px;color:var(--primary)}.pt small{font-size:11px;color:var(--mut)}
+.body{flex:1;min-width:0}
+.nm{font-weight:600;font-size:16px;overflow-wrap:anywhere}
+.meta{font-size:13px;color:var(--mut);margin-top:2px;overflow-wrap:anywhere}
+.mah{font-size:13px;color:var(--primary);font-weight:600;margin-top:2px}
+.fy{color:var(--gold);font-weight:600}
+a.go{display:inline-block;margin-top:8px;font-size:13px;font-weight:600;color:var(--primary);text-decoration:none;border:1px solid var(--line);padding:5px 12px;border-radius:99px}
+.ikon{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:99px;padding:5px 10px;font:inherit;font-size:13px;margin-left:6px;cursor:pointer}
+.ikon:hover{background:var(--primarybg)}
+.foot{color:var(--mut);font-size:12px;margin-top:28px}
+.none{color:var(--mut);padding:24px 0}
+#map{display:none;height:68vh;border-radius:14px;border:1px solid var(--line);margin-top:8px}
+.leaflet-popup-content{font-family:inherit;font-size:14px}
+@media (max-width:680px){
+  .wrap{padding:14px 10px 24px}
+  h1{font-size:24px}
+  .f-row{flex-direction:column;gap:8px}
+  .f-row > div{width:100%}
+  .tabs button{padding:8px 12px;font-size:14px}
+  .chips button{font-size:12px}
+  .row{padding:10px}
+  #map{height:50vh}
+}
+</style>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head><body><div class="wrap">
+
+<h1>📡 __BASLIK__</h1>
+<p class="sub" style="margin-bottom: 4px;">__ALT__</p>
+<div style="font-size: 13px; font-weight: 600; color: var(--primary); margin-bottom: 16px;">📅 __TARIH__ · Sade görünüm</div>
+
+<div class="f-row" style="margin-bottom: 8px;">
+  <button class="ikon" style="margin-left:0" onclick="rotaAc()">Rotada Aç</button>
+  <button class="ikon" onclick="wpListe()">WP'ye Gönder</button>
+  <button class="ikon" onclick="konumAl(draw)">📍 Konum Bul</button>
+  <button class="ikon" onclick="favorileriTemizle()" style="color:#c00">🗑️ Sıfırla</button>
+</div>
+
+<select id="ic" aria-label="İlçe"></select>
+<div style="margin-bottom: 4px;">
+<input id="mq" type="search" placeholder="📍 Hızlı Mahalle Ara (Örn: Çarşı, Karataş)">
+</div>
+<select id="mh" aria-label="Mahalle"></select>
+<div class="f-row">
+  <div><label for="mp">En az puan</label><input id="mp" type="number" step="0.1" placeholder="örn. 4.5"></div>
+  <div><label for="my">En az yorum</label><input id="my" type="number" step="10" placeholder="örn. 200"></div>
+</div>
+<input id="q" type="search" placeholder="Listede kelime ara (örn. pide, kebap)">
+<div class="f-row">
+  <select id="sirala" aria-label="Sıralama" style="flex:2">
+    <option value="skor">Sıralama: Güvenilir skor</option>
+    <option value="puan">Sıralama: Puan (yüksekten)</option>
+    <option value="yorum">Sıralama: Yorum sayısı (çoktan)</option>
+    <option value="yakin">Sıralama: Bana yakın</option>
+  </select>
+  <select id="gs" style="flex:1">
+    <option value="">Hepsi</option>
+    <option value="fav">Favoriler</option>
+  </select>
+</div>
+
+<div class="tabs" id="tabs" role="tablist"></div>
+
+<div class="chips" id="chips"></div>
+<div id="map"></div>
+<div id="list"></div>
+<p class="foot"><b>📡 Local Radar</b> · Data source: Google Maps. Ratings reflect the day the guide was created. Verify opening hours before visiting. Map: © OpenStreetMap contributors.</p>
+</div>
+<script>
+const V=__DATA__;
+const O=V.O,I=V.I,ANA=Object.keys(O);let ana='',alt='',map=null,katman=null;
+const HARITA='__MAP__';
+const RENK={'Yemek':'#e8710a','Gezilecek yerler':'#1a73e8','Alışveriş':'#0b8043','Diğer':'#5f6368'};
+const $=id=>document.getElementById(id);
+const tabs=$('tabs'),chips=$('chips'),list=$('list'),q=$('q'),mh=$('mh'),mq=$('mq'),ic=$('ic'),mp=$('mp'),my=$('my'),sirala=$('sirala'),gs=$('gs'),mapEl=$('map');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const tl=s=>String(s).toLocaleLowerCase('tr');
+
+function durumOku(){try{return JSON.parse(localStorage.getItem('gezi_durum')||'{}')}catch(e){return {}}}
+function durumYaz(){try{localStorage.setItem('gezi_durum',JSON.stringify(durum))}catch(e){}}
+let durum=durumOku();
+let konum=null;
+
+function km(a,b,c,d){const t=x=>x*Math.PI/180,R=6371,dl=t(c-a),dg=t(d-b);
+  const h=Math.sin(dl/2)**2+Math.cos(t(a))*Math.cos(t(c))*Math.sin(dg/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
+function uzak(x){return(konum&&x.e!=null)?km(konum.lat,konum.lon,x.e,x.b):null}
+
+function konumAl(sonra){
+  if(!navigator.geolocation){alert('Bu tarayıcı konum vermiyor');return;}
+  navigator.geolocation.getCurrentPosition(
+    p=>{konum={lat:p.coords.latitude,lon:p.coords.longitude};if(sonra)sonra();},
+    ()=>alert('Konum alınamadı. Tarayıcıda konum iznini aç.'),
+    {enableHighAccuracy:true,timeout:10000});
+}
+
+const ilceler=[...new Set(I.map(x=>x.c).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'tr'));
+if(ilceler.length>=2)ic.innerHTML='<option value="">Tüm ilçeler</option>'+ilceler.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+else ic.style.display='none';
+
+const mahSayisi=new Set(I.filter(x=>x.m!=='Bilinmiyor').map(x=>x.c+'|'+x.m)).size;
+if(mahSayisi<2){mh.style.display='none';mq.style.display='none'}
+
+function mahalleListe(){
+  if(mahSayisi<2)return;
+  const c=ic.value,t=tl(mq.value.trim()),say={};
+  I.forEach(x=>{if((c&&x.c!==c)||x.m==='Bilinmiyor')return;const k=x.c+'|'+x.m;say[k]=(say[k]||0)+1});
+  const ks=Object.keys(say).filter(k=>tl(k.split('|')[1]).includes(t)).sort((a,b)=>a.split('|')[1].localeCompare(b.split('|')[1],'tr'));
+  const onceki=mh.value;
+  mh.innerHTML='<option value="">Tüm mahalleler</option>'+ks.map(k=>{const p=k.split('|');
+    return `<option value="${esc(k)}">${esc(p[1])}${(!c&&p[0])?' · '+esc(p[0]):''} (${say[k]})</option>`}).join('');
+  if(ks.includes(onceki))mh.value=onceki;
+}
+
+function ok(x){
+  const t=tl(q.value.trim()),p0=parseFloat(mp.value)||0,y0=parseInt(my.value,10)||0;
+  return (!ic.value||x.c===ic.value)&&(!mh.value||(x.c+'|'+x.m)===mh.value)&&
+    (!t||tl(x.n+' '+x.t).includes(t))&&(p0===0&&y0===0&&x.u ? true : (parseFloat(x.p.replace(',','.'))>=p0&&(x.y||0)>=y0))&&
+    (gs.value===''||(gs.value==='fav'&&(durum[x.l]||{}).fav));
+}
+
+function kiyas(a,b){
+  const s=sirala.value;
+  if(s==='puan')return parseFloat(b.p.replace(',','.'))-parseFloat(a.p.replace(',','.'));
+  if(s==='yorum')return b.y-a.y;
+  if(s==='yakin'){ if(!konum){konumAl(draw);return 0;} return (uzak(a)??1e9)-(uzak(b)??1e9); }
+  return b.s-a.s;
+}
+
+function haritaCiz(){
+  list.style.display='none';mapEl.style.display='block';
+  if(!map){
+    map=L.map('map');
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap katkıcıları'}).addTo(map);
+  }
+  setTimeout(()=>map.invalidateSize(),60);
+  if(katman)map.removeLayer(katman);
+  const pts=I.filter(x=>ok(x)&&typeof x.e==='number'&&typeof x.b==='number');
+  const isaretler=pts.map(x=>L.circleMarker([x.e,x.b],{radius:7,weight:2,color:'#fff',fillColor:RENK[x.A]||'#5f6368',fillOpacity:.9})
+    .bindPopup('<b>'+esc(x.n)+'</b><br>⭐ '+esc(x.p)+' · '+x.y+' yorum<br>'+esc(x.m!=='Bilinmiyor'?x.m:'')+
+      '<br><a href="'+esc(x.l)+'" target="_blank" rel="noopener">Google Haritalar\u2019da aç</a>'));
+  katman=L.featureGroup(isaretler).addTo(map);
+  if(pts.length)map.fitBounds(katman.getBounds().pad(0.15));
+  else map.setView([38.96,35.24],6);
+}
+
+function satir(x){
+  const meta=[esc(x.t),x.f?'<span class="fy">'+esc(x.f)+'</span>':'',esc(x.a)].filter(Boolean).join(' · ');
+  const dist=uzak(x)!=null?'<div class="mah">'+uzak(x).toFixed(1).replace('.',',')+' km</div>':'';
+  const fDurum=durum[x.l]||{};
+  const puanKutusu=x.u?'<b style="font-size:13px">puansız</b><small>—</small>':`<b>${x.p}</b><small>${x.y}</small>`;
+  return `<div class="row"><div class="pt">${puanKutusu}</div><div class="body"><div class="nm">${esc(x.n)}</div>`+
+    (meta?`<div class="meta">${meta}</div>`:'')+(x.m!=='Bilinmiyor'?`<div class="mah">${esc(x.m)}${(ilceler.length>=2&&x.c)?' · '+esc(x.c):''}</div>`:'')+dist+
+    `<div style="margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
+      <a class="go" href="${esc(x.l)}" target="_blank" rel="noopener">Haritada aç</a>
+      <button class="ikon" data-t="fav" data-l="${esc(x.l)}">${fDurum.fav?'★':'☆'}</button>
+    </div></div></div>`;
+}
+
+function rotaAc(){
+  const d=I.filter(x=>(durum[x.l]||{}).fav&&x.e!=null);
+  if(!d.length){alert('Önce yerleri ★ ile işaretle (ve konumları belli olmalı)');return;}
+  const son=d[d.length-1], ara=d.slice(0,-1).map(x=>x.e+','+x.b).join('|');
+  let url='https://www.google.com/maps/dir/?api=1&destination='+son.e+','+son.b+'&travelmode=driving';
+  if(ara) url+='&waypoints='+encodeURIComponent(ara);
+  window.open(url,'_blank');
+}
+
+function wpListe(){
+  const l=I.filter(ok).slice(0,10).filter(x=>x.e!=null);
+  if(!l.length){alert('Listede konumlu yer yok');return;}
+  const t=l.map((x,i)=>`${i+1}. ${x.n} (${x.p}★, ${x.y} yorum)${x.m!=='Bilinmiyor'?' - '+x.m:''}\nhttps://maps.google.com/?q=${x.e},${x.b}`).join('\n\n');
+  window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank');
+}
+
+function favorileriTemizle(){
+  if(!confirm('Tüm favoriler silinecek. Emin misin?'))return;
+  localStorage.removeItem('gezi_durum');
+  durum={};
+  draw();
+}
+
+list.addEventListener('click',e=>{
+  const b=e.target.closest('.ikon'); if(!b) return;
+  const l=b.dataset.l; if(!l) return;
+  durum[l]=durum[l]||{};
+  if(b.dataset.t==='fav') durum[l].fav=!durum[l].fav;
+  durumYaz(); draw();
+});
+
+function draw(){
+  if(ana===HARITA){haritaCiz();}
+  else{mapEl.style.display='none';list.style.display='';}
+  const f=I.filter(ok),arama=q.value.trim()!=='';
+  const cnt={};f.forEach(x=>{cnt[x.A]=(cnt[x.A]||0)+1});
+  tabs.innerHTML=`<button role="tab" aria-selected="${ana===''}" data-a="">Tümü (${f.length})</button>`+
+    ANA.map(a=>`<button role="tab" aria-selected="${ana===a}" data-a="${esc(a)}">${esc(a)} (${cnt[a]||0})</button>`).join('')+
+    `<button role="tab" aria-selected="${ana===HARITA}" data-a="${HARITA}">🗺️ Harita</button>`;
+
+  if(ana&&ana!==HARITA){
+    const c2={};f.filter(x=>x.A===ana).forEach(x=>{c2[x.S]=(c2[x.S]||0)+1});
+    chips.innerHTML=`<button aria-pressed="${alt===''}" data-s="">Hepsi</button>`+
+      O[ana].filter(s=>c2[s]).map(s=>`<button aria-pressed="${alt===s}" data-s="${esc(s)}">${esc(s)} (${c2[s]})</button>`).join('');
+    chips.style.display='';
+  }else chips.style.display='none';
+
+  if(ana===HARITA)return;
+
+  const sec=f.filter(x=>arama||!ana||(x.A===ana&&(!alt||x.S===alt)));
+  const tumu=arama||!ana;let out='';
+
+  ANA.forEach(a=>O[a].forEach(s=>{
+    const it=sec.filter(x=>x.A===a&&x.S===s);if(!it.length)return;
+    it.sort(kiyas);
+    const bas=tumu?a+' · '+s:(alt?'':s);
+    out+=(bas?`<h2>${esc(bas)}</h2>`:'')+'<div>'+it.map(satir).join('')+'</div>';
+  }));
+  list.innerHTML=out||'<p class="none">Sonuç yok. Süzgeçleri gevşetmeyi dene.</p>';
+}
+
+tabs.onclick=e=>{const b=e.target.closest('button');if(b){ana=b.dataset.a;alt='';draw();scrollTo(0,0)}};
+chips.onclick=e=>{const b=e.target.closest('button');if(b){alt=b.dataset.s;draw()}};
+ic.onchange=()=>{mahalleListe();draw()};
+mq.oninput=()=>{mahalleListe();draw()};
+mh.onchange=draw;
+mp.oninput=draw;
+my.oninput=draw;
+q.oninput=draw;
+gs.onchange=draw;
+sirala.onchange=draw;
+
+mahalleListe();
+draw();
 </script></body></html>
 """
 
