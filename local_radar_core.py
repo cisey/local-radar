@@ -173,7 +173,7 @@ TUMU = list(dict.fromkeys(YEMEK + GEZI + DIGER))
 
 MODLAR = {
     "Hızlı (yemek ve gezi, tek parça)":  dict(kategoriler=YEMEK[:10] + GEZI[:8], izgara=False),
-    "Normal (yemek ve gezi, ızgaralı)":  dict(kategoriler=YEMEK + GEZI, izgara=True),
+    "Normal (yemek ve gezi, ızgaralı)":  dict(kategoriler=YEMEK + GEZI + ["kasap"], izgara=True),
     "Kapsamlı (her şey, ızgaralı)":      dict(kategoriler=TUMU, izgara=True),
 }
 
@@ -882,10 +882,60 @@ def _yeni_mi(tarih):
         return False
 
 
-def html_yaz(kayitlar, ayar, yol, sade=False):
+# Leaflet harita stili dogrudan sayfaya gomulur (disaridan yukleme yok; CSP/ofline sorunlarini onler).
+LEAFLET_CSS = r""".leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-tile-container,.leaflet-pane>svg,.leaflet-pane>canvas,.leaflet-zoom-box,.leaflet-image-layer,.leaflet-layer{position:absolute;left:0;top:0;}.leaflet-container{overflow:hidden;}.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow{-webkit-user-select:none;-moz-user-select:none;user-select:none;-webkit-user-drag:none;}.leaflet-tile::selection{background:transparent;}.leaflet-safari .leaflet-tile{image-rendering:-webkit-optimize-contrast;}.leaflet-safari .leaflet-tile-container{width:1600px;height:1600px;-webkit-transform-origin:0 0;}.leaflet-marker-icon,.leaflet-marker-shadow{display:block;}.leaflet-container .leaflet-overlay-pane svg{max-width:none !important;max-height:none !important;}.leaflet-container .leaflet-marker-pane img,.leaflet-container .leaflet-shadow-pane img,.leaflet-container .leaflet-tile-pane img,.leaflet-container img.leaflet-image-layer,.leaflet-container .leaflet-tile{max-width:none !important;max-height:none !important;width:auto;padding:0;}.leaflet-container img.leaflet-tile{mix-blend-mode:plus-lighter;}.leaflet-container.leaflet-touch-zoom{-ms-touch-action:pan-x pan-y;touch-action:pan-x pan-y;}.leaflet-container.leaflet-touch-drag{-ms-touch-action:pinch-zoom;touch-action:none;touch-action:pinch-zoom;}.leaflet-container.leaflet-touch-drag.leaflet-touch-zoom{-ms-touch-action:none;touch-action:none;}.leaflet-container{-webkit-tap-highlight-color:transparent;}.leaflet-container a{-webkit-tap-highlight-color:rgba(51,181,229,0.4);}.leaflet-tile{filter:inherit;visibility:hidden;}.leaflet-tile-loaded{visibility:inherit;}.leaflet-zoom-box{width:0;height:0;-moz-box-sizing:border-box;box-sizing:border-box;z-index:800;}.leaflet-overlay-pane svg{-moz-user-select:none;}.leaflet-pane{z-index:400;}.leaflet-tile-pane{z-index:200;}.leaflet-overlay-pane{z-index:400;}.leaflet-shadow-pane{z-index:500;}.leaflet-marker-pane{z-index:600;}.leaflet-tooltip-pane{z-index:650;}.leaflet-popup-pane{z-index:700;}.leaflet-map-pane canvas{z-index:100;}.leaflet-map-pane svg{z-index:200;}.leaflet-vml-shape{width:1px;height:1px;}.lvml{behavior:url(#default#VML);display:inline-block;position:absolute;}.leaflet-control{position:relative;z-index:800;pointer-events:visiblePainted;pointer-events:auto;}.leaflet-top,.leaflet-bottom{position:absolute;z-index:1000;pointer-events:none;}.leaflet-top{top:0;}.leaflet-right{right:0;}.leaflet-bottom{bottom:0;}.leaflet-left{left:0;}.leaflet-control{float:left;clear:both;}.leaflet-right .leaflet-control{float:right;}.leaflet-top .leaflet-control{margin-top:10px;}.leaflet-bottom .leaflet-control{margin-bottom:10px;}.leaflet-left .leaflet-control{margin-left:10px;}.leaflet-right .leaflet-control{margin-right:10px;}.leaflet-fade-anim .leaflet-popup{opacity:0;-webkit-transition:opacity 0.2s linear;-moz-transition:opacity 0.2s linear;transition:opacity 0.2s linear;}.leaflet-fade-anim .leaflet-map-pane .leaflet-popup{opacity:1;}.leaflet-zoom-animated{-webkit-transform-origin:0 0;-ms-transform-origin:0 0;transform-origin:0 0;}svg.leaflet-zoom-animated{will-change:transform;}.leaflet-zoom-anim .leaflet-zoom-animated{-webkit-transition:-webkit-transform 0.25s cubic-bezier(0,0,0.25,1);-moz-transition:-moz-transform 0.25s cubic-bezier(0,0,0.25,1);transition:transform 0.25s cubic-bezier(0,0,0.25,1);}.leaflet-zoom-anim .leaflet-tile,.leaflet-pan-anim .leaflet-tile{-webkit-transition:none;-moz-transition:none;transition:none;}.leaflet-zoom-anim .leaflet-zoom-hide{visibility:hidden;}.leaflet-interactive{cursor:pointer;}.leaflet-grab{cursor:-webkit-grab;cursor:-moz-grab;cursor:grab;}.leaflet-crosshair,.leaflet-crosshair .leaflet-interactive{cursor:crosshair;}.leaflet-popup-pane,.leaflet-control{cursor:auto;}.leaflet-dragging .leaflet-grab,.leaflet-dragging .leaflet-grab .leaflet-interactive,.leaflet-dragging .leaflet-marker-draggable{cursor:move;cursor:-webkit-grabbing;cursor:-moz-grabbing;cursor:grabbing;}.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-image-layer,.leaflet-pane>svg path,.leaflet-tile-container{pointer-events:none;}.leaflet-marker-icon.leaflet-interactive,.leaflet-image-layer.leaflet-interactive,.leaflet-pane>svg path.leaflet-interactive,svg.leaflet-image-layer.leaflet-interactive path{pointer-events:visiblePainted;pointer-events:auto;}.leaflet-container{background:#ddd;outline-offset:1px;}.leaflet-container a{color:#0078A8;}.leaflet-zoom-box{border:2px dotted #38f;background:rgba(255,255,255,0.5);}.leaflet-container{font-family:"Helvetica Neue",Arial,Helvetica,sans-serif;font-size:12px;font-size:0.75rem;line-height:1.5;}.leaflet-bar{box-shadow:0 1px 5px rgba(0,0,0,0.65);border-radius:4px;}.leaflet-bar a{background-color:#fff;border-bottom:1px solid #ccc;width:26px;height:26px;line-height:26px;display:block;text-align:center;text-decoration:none;color:black;}.leaflet-bar a,.leaflet-control-layers-toggle{background-position:50% 50%;background-repeat:no-repeat;display:block;}.leaflet-bar a:hover,.leaflet-bar a:focus{background-color:#f4f4f4;}.leaflet-bar a:first-child{border-top-left-radius:4px;border-top-right-radius:4px;}.leaflet-bar a:last-child{border-bottom-left-radius:4px;border-bottom-right-radius:4px;border-bottom:none;}.leaflet-bar a.leaflet-disabled{cursor:default;background-color:#f4f4f4;color:#bbb;}.leaflet-touch .leaflet-bar a{width:30px;height:30px;line-height:30px;}.leaflet-touch .leaflet-bar a:first-child{border-top-left-radius:2px;border-top-right-radius:2px;}.leaflet-touch .leaflet-bar a:last-child{border-bottom-left-radius:2px;border-bottom-right-radius:2px;}.leaflet-control-zoom-in,.leaflet-control-zoom-out{font:bold 18px 'Lucida Console',Monaco,monospace;text-indent:1px;}.leaflet-touch .leaflet-control-zoom-in,.leaflet-touch .leaflet-control-zoom-out{font-size:22px;}.leaflet-control-layers{box-shadow:0 1px 5px rgba(0,0,0,0.4);background:#fff;border-radius:5px;}.leaflet-control-layers-toggle{background-image:none;width:36px;height:36px;}.leaflet-retina .leaflet-control-layers-toggle{background-image:none;background-size:26px 26px;}.leaflet-touch .leaflet-control-layers-toggle{width:44px;height:44px;}.leaflet-control-layers .leaflet-control-layers-list,.leaflet-control-layers-expanded .leaflet-control-layers-toggle{display:none;}.leaflet-control-layers-expanded .leaflet-control-layers-list{display:block;position:relative;}.leaflet-control-layers-expanded{padding:6px 10px 6px 6px;color:#333;background:#fff;}.leaflet-control-layers-scrollbar{overflow-y:scroll;overflow-x:hidden;padding-right:5px;}.leaflet-control-layers-selector{margin-top:2px;position:relative;top:1px;}.leaflet-control-layers label{display:block;font-size:13px;font-size:1.08333em;}.leaflet-control-layers-separator{height:0;border-top:1px solid #ddd;margin:5px -10px 5px -6px;}.leaflet-default-icon-path{background-image:none;}.leaflet-container .leaflet-control-attribution{background:#fff;background:rgba(255,255,255,0.8);margin:0;}.leaflet-control-attribution,.leaflet-control-scale-line{padding:0 5px;color:#333;line-height:1.4;}.leaflet-control-attribution a{text-decoration:none;}.leaflet-control-attribution a:hover,.leaflet-control-attribution a:focus{text-decoration:underline;}.leaflet-attribution-flag{display:inline !important;vertical-align:baseline !important;width:1em;height:0.6669em;}.leaflet-left .leaflet-control-scale{margin-left:5px;}.leaflet-bottom .leaflet-control-scale{margin-bottom:5px;}.leaflet-control-scale-line{border:2px solid #777;border-top:none;line-height:1.1;padding:2px 5px 1px;white-space:nowrap;-moz-box-sizing:border-box;box-sizing:border-box;background:rgba(255,255,255,0.8);text-shadow:1px 1px #fff;}.leaflet-control-scale-line:not(:first-child){border-top:2px solid #777;border-bottom:none;margin-top:-2px;}.leaflet-control-scale-line:not(:first-child):not(:last-child){border-bottom:2px solid #777;}.leaflet-touch .leaflet-control-attribution,.leaflet-touch .leaflet-control-layers,.leaflet-touch .leaflet-bar{box-shadow:none;}.leaflet-touch .leaflet-control-layers,.leaflet-touch .leaflet-bar{border:2px solid rgba(0,0,0,0.2);background-clip:padding-box;}.leaflet-popup{position:absolute;text-align:center;margin-bottom:20px;}.leaflet-popup-content-wrapper{padding:1px;text-align:left;border-radius:12px;}.leaflet-popup-content{margin:13px 24px 13px 20px;line-height:1.3;font-size:13px;font-size:1.08333em;min-height:1px;}.leaflet-popup-content p{margin:17px 0;margin:1.3em 0;}.leaflet-popup-tip-container{width:40px;height:20px;position:absolute;left:50%;margin-top:-1px;margin-left:-20px;overflow:hidden;pointer-events:none;}.leaflet-popup-tip{width:17px;height:17px;padding:1px;margin:-10px auto 0;pointer-events:auto;-webkit-transform:rotate(45deg);-moz-transform:rotate(45deg);-ms-transform:rotate(45deg);transform:rotate(45deg);}.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:white;color:#333;box-shadow:0 3px 14px rgba(0,0,0,0.4);}.leaflet-container a.leaflet-popup-close-button{position:absolute;top:0;right:0;border:none;text-align:center;width:24px;height:24px;font:16px/24px Tahoma,Verdana,sans-serif;color:#757575;text-decoration:none;background:transparent;}.leaflet-container a.leaflet-popup-close-button:hover,.leaflet-container a.leaflet-popup-close-button:focus{color:#585858;}.leaflet-popup-scrolled{overflow:auto;}.leaflet-oldie .leaflet-popup-content-wrapper{-ms-zoom:1;}.leaflet-oldie .leaflet-popup-tip{width:24px;margin:0 auto;-ms-filter:"progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678,M12=0.70710678,M21=-0.70710678,M22=0.70710678)";filter:progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678,M12=0.70710678,M21=-0.70710678,M22=0.70710678);}.leaflet-oldie .leaflet-control-zoom,.leaflet-oldie .leaflet-control-layers,.leaflet-oldie .leaflet-popup-content-wrapper,.leaflet-oldie .leaflet-popup-tip{border:1px solid #999;}.leaflet-div-icon{background:#fff;border:1px solid #666;}.leaflet-tooltip{position:absolute;padding:6px;background-color:#fff;border:1px solid #fff;border-radius:3px;color:#222;white-space:nowrap;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,0.4);}.leaflet-tooltip.leaflet-interactive{cursor:pointer;pointer-events:auto;}.leaflet-tooltip-top:before,.leaflet-tooltip-bottom:before,.leaflet-tooltip-left:before,.leaflet-tooltip-right:before{position:absolute;pointer-events:none;border:6px solid transparent;background:transparent;content:"";}.leaflet-tooltip-bottom{margin-top:6px;}.leaflet-tooltip-top{margin-top:-6px;}.leaflet-tooltip-bottom:before,.leaflet-tooltip-top:before{left:50%;margin-left:-6px;}.leaflet-tooltip-top:before{bottom:0;margin-bottom:-12px;border-top-color:#fff;}.leaflet-tooltip-bottom:before{top:0;margin-top:-12px;margin-left:-6px;border-bottom-color:#fff;}.leaflet-tooltip-left{margin-left:-6px;}.leaflet-tooltip-right{margin-left:6px;}.leaflet-tooltip-left:before,.leaflet-tooltip-right:before{top:50%;margin-top:-6px;}.leaflet-tooltip-left:before{right:0;margin-right:-12px;border-left-color:#fff;}.leaflet-tooltip-right:before{left:0;margin-left:-12px;border-right-color:#fff;}@media print{.leaflet-control{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}"""
+
+
+# ---------- Yemek alt kategorileri (sadece yemek çıktısı ve Kasap ayrımı) ----------
+YEMEK_ALT_SIRA = ["Döner & Kebap", "Çiğ Köfte", "Pide & Lahmacun", "Fast food & Burger & Pizza",
+                  "Türk & Aile Restoranı", "Kafe & Kahve", "Kahvaltı", "Fırın & Tatlı", "Kasap"]
+
+# Anahtar kelimeler fold() ile yazılır (ç->c, ğ->g, ı->i, ö->o, ş->s, ü->u)
+_YEMEK_ALT_KURAL = [
+    ("Kasap", ["kasap", "sarkuteri", "kasab"]),
+    ("Çiğ Köfte", ["cig kofte", "cigkofte"]),
+    ("Pide & Lahmacun", ["pide", "lahmacun"]),
+    ("Döner & Kebap", ["doner", "kebap", "kebab", "durum", "et lokanta", "et restoran", "et yemek",
+                       "ciger", "kofte", "mangal", "et ve tavuk"]),
+    ("Kahvaltı", ["kahvalti", "serpme", "brunch"]),
+    ("Fast food & Burger & Pizza", ["fast food", "fastfood", "pizza", "burger", "hoagie", "tost", "sandvic", "cajun"]),
+    ("Fırın & Tatlı", ["firin", "pastane", "tatli", "baklava", "kunefe", "dondurma", "pasta", "kadayif",
+                       "simit", "borek", "gozleme", "katmer", "sikma", "waffle", "puding", "tatlici"]),
+    ("Kafe & Kahve", ["kafe", "cafe", "kahve", "kiraathane", "coffee", "starbucks"]),
+]
+
+
+def yemek_alt(r):
+    """Kaydın yemek alt kategorisini döndürür; yemek değilse None."""
+    bolum = r.get("Bölüm", "")
+    if not (ANA.get(bolum) == "Yemek" or bolum == "Alışveriş"):
+        return None
+    m = fold(f"{r.get('Yer', '')} {r.get('Tür', '') or ''}")
+    for alt, kws in _YEMEK_ALT_KURAL:
+        if any(k in m for k in kws):
+            return alt
+    return "Türk & Aile Restoranı" if ANA.get(bolum) == "Yemek" else None
+
+
+def html_yaz(kayitlar, ayar, yol, sade=False, yemek_sadece=False, alisveris_acik=True):
     ogeler = []
+    kasap_var = False
     for r in kayitlar:
-        ana = ANA.get(r["Bölüm"], "Diğer")
+        bolum = r["Bölüm"]
+        alt = yemek_alt(r)
+        if yemek_sadece:
+            if alt is None:
+                continue
+            ana, sub = "Yemek", alt
+        else:
+            if bolum == "Alışveriş" and alt is None and not alisveris_acik:
+                continue
+            ana = ANA.get(bolum, "Diğer")
+            sub = bolum if ana == "Yemek" else r["Grup"]
+            if alt == "Kasap":
+                ana, sub = "Yemek", "Kasap"
+        if sub == "Kasap":
+            kasap_var = True
         ogeler.append({"n": r["Yer"], "p": str(r["Puan"]).replace(".", ","), "y": r["Yorum Sayısı"],
                        "u": 1 if r.get("_puansiz") else 0,
                        "s": r["Güvenilir Skor"],
@@ -893,17 +943,32 @@ def html_yaz(kayitlar, ayar, yol, sade=False):
                        "m": r.get("Mahalle", "Bilinmiyor"), "c": r.get("İlçe", ""), "l": r["Harita Linki"],
                        "e": r.get("Enlem"), "b": r.get("Boylam"),
                        "w": 1 if _yeni_mi(r.get("İlk Görülme", "")) else 0,
-                       "A": ana, "S": r["Bölüm"] if ana == "Yemek" else r["Grup"]})
+                       "A": ana, "S": sub})
 
-    veri = {"O": ALT_SIRA, "I": ogeler}
+    if yemek_sadece:
+        O = {"Yemek": list(YEMEK_ALT_SIRA)}
+    else:
+        O = {k: list(v) for k, v in ALT_SIRA.items()}
+        if kasap_var:
+            O["Yemek"].append("Kasap")
+    veri = {"O": O, "I": ogeler}
     alt = "Scan, discover, plan. Google Maps results filtered and organized by Local Radar."
     tarih = time.strftime("%d.%m.%Y")
 
     sablon = SABLON_SADE if sade else SABLON
-    sayfa = (sablon.replace("__DATA__", json.dumps(veri, ensure_ascii=False).replace("</", "<\\/"))
+    sayfa = (sablon.replace("__LEAFLET_CSS__", LEAFLET_CSS)
+             .replace("__DATA__", json.dumps(veri, ensure_ascii=False).replace("</", "<\\/"))
              .replace("__BASLIK__", ayar["baslik"])
              .replace("__ALT__", alt)
              .replace("__TARIH__", tarih))
+
+    if yemek_sadece and not sade:
+        for _satir in ('  <button class="ikon" style="margin-left:0" onclick="rotaAc()">Rotada Aç</button>\n',
+                       '  <button class="ikon" onclick="wpListe()">WP\'ye Gönder</button>\n',
+                       '  <button class="ikon" onclick="konumAl(draw)">📍 Konum Bul</button>\n'):
+            sayfa = sayfa.replace(_satir, "")
+        sayfa = sayfa.replace('<button class="ikon" onclick="tumVerileriTemizle()" style="color:#c00">',
+                              '<button class="ikon" onclick="tumVerileriTemizle()" style="margin-left:0;color:#c00">')
 
     with open(yol, "w", encoding="utf-8") as f:
         f.write(sayfa)
@@ -1962,14 +2027,17 @@ def calistir(ayar, ilerleme=lambda i, n, m: print(f"[{i}/{n}] {m}"), durdur=lamb
     slug = ayar["dosya"]
     csv_yolu = os.path.join(klasor, f"{slug}_places.csv")
     xlsx_yolu = os.path.join(klasor, f"{slug}_places.xlsx")
-    html_yolu = os.path.join(klasor, f"{slug}_guide.html")
-    html_sade_yolu = os.path.join(klasor, f"{slug}_guide_sade.html")
+    yemek_sadece = bool(ayar.get("yemek_sadece"))
+    alisveris_acik = bool(ayar.get("alisveris_acik", True))
+    cikti_adi = ("Yemek-" if yemek_sadece else "") + slug
+    html_yolu = os.path.join(klasor, f"{cikti_adi}_guide.html")
+    html_sade_yolu = os.path.join(klasor, f"{cikti_adi}_guide_sade.html")
     kml_yolu = os.path.join(klasor, f"{slug}_places.kml")
     csv_yaz(kayitlar, csv_yolu, HAVUZ_ALANLAR)
     xlsx_yaz(kayitlar, xlsx_yolu, HAVUZ_ALANLAR)
     json_yolu = os.path.join(klasor, f"{slug}_places.json")
-    html_yaz(kayitlar, ayar, html_yolu)
-    html_yaz(kayitlar, ayar, html_sade_yolu, sade=True)
+    html_yaz(kayitlar, ayar, html_yolu, yemek_sadece=yemek_sadece, alisveris_acik=alisveris_acik)
+    html_yaz(kayitlar, ayar, html_sade_yolu, sade=True, yemek_sadece=yemek_sadece, alisveris_acik=alisveris_acik)
     json_yaz(kayitlar, json_yolu, HAVUZ_ALANLAR)
     kml_yaz(kayitlar, kml_yolu)
 
@@ -2018,7 +2086,7 @@ SABLON = r"""<!DOCTYPE html>
 <html lang="tr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>__BASLIK__</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>__LEAFLET_CSS__</style>
 <style>
 :root{--bg:#f8f9fa;--card:#fff;--ink:#202124;--mut:#5f6368;--line:#dadce0;--primary:#1a73e8;--primarybg:#e8f0fe;--gold:#f29900;--yesil:#0b8043}
 @media (prefers-color-scheme:dark){:root{--bg:#202124;--card:#2d2e31;--ink:#e8eaed;--mut:#9aa0a6;--line:#3c4043;--primary:#8ab4f8;--primarybg:#303134;--gold:#fbbc04;--yesil:#81c995}}
@@ -2451,7 +2519,7 @@ SABLON_SADE = r"""<!DOCTYPE html>
 <html lang="tr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>__BASLIK__</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>__LEAFLET_CSS__</style>
 <style>
 :root{--bg:#f8f9fa;--card:#fff;--ink:#202124;--mut:#5f6368;--line:#dadce0;--primary:#1a73e8;--primarybg:#e8f0fe;--gold:#f29900;--yesil:#0b8043}
 @media (prefers-color-scheme:dark){:root{--bg:#202124;--card:#2d2e31;--ink:#e8eaed;--mut:#9aa0a6;--line:#3c4043;--primary:#8ab4f8;--primarybg:#303134;--gold:#fbbc04;--yesil:#81c995}}
@@ -2508,10 +2576,7 @@ a.go{display:inline-block;margin-top:8px;font-size:13px;font-weight:600;color:va
 <div style="font-size: 13px; font-weight: 600; color: var(--primary); margin-bottom: 16px;">📅 __TARIH__ · Sade görünüm</div>
 
 <div class="f-row" style="margin-bottom: 8px;">
-  <button class="ikon" style="margin-left:0" onclick="rotaAc()">Rotada Aç</button>
-  <button class="ikon" onclick="wpListe()">WP'ye Gönder</button>
-  <button class="ikon" onclick="konumAl(draw)">📍 Konum Bul</button>
-  <button class="ikon" onclick="favorileriTemizle()" style="color:#c00">🗑️ Sıfırla</button>
+  <button class="ikon" style="margin-left:0;color:#c00" onclick="favorileriTemizle()">🗑️ Sıfırla</button>
 </div>
 
 <select id="ic" aria-label="İlçe"></select>
@@ -2651,10 +2716,17 @@ function wpListe(){
 }
 
 function favorileriTemizle(){
-  if(!confirm('Tüm favoriler silinecek. Emin misin?'))return;
-  localStorage.removeItem('gezi_durum');
-  durum={};
-  draw();
+  // Süzgeçleri ve seçili mahalleyi sıfırla
+  ic.value='';mq.value='';mahalleListe();mh.value='';
+  mp.value='';my.value='';q.value='';
+  sirala.value='skor';gs.value='';ana='';alt='';
+  draw();scrollTo(0,0);
+  // Favori/not varsa ayrıca sor
+  if(Object.keys(durum).length&&confirm('Favoriler ve notlar da silinsin mi?')){
+    localStorage.removeItem('gezi_durum');
+    durum={};
+    draw();
+  }
 }
 
 list.addEventListener('click',e=>{
@@ -2670,11 +2742,17 @@ function draw(){
   else{mapEl.style.display='none';list.style.display='';}
   const f=I.filter(ok),arama=q.value.trim()!=='';
   const cnt={};f.forEach(x=>{cnt[x.A]=(cnt[x.A]||0)+1});
-  tabs.innerHTML=`<button role="tab" aria-selected="${ana===''}" data-a="">Tümü (${f.length})</button>`+
+  const TEK=ANA.length===1;
+  if(TEK){
+    const a0=ANA[0],c3={};f.forEach(x=>{c3[x.S]=(c3[x.S]||0)+1});
+    tabs.innerHTML=`<button role="tab" aria-selected="${ana===''}" data-a="">Tümü (${f.length})</button>`+
+      O[a0].filter(s=>c3[s]).map(s=>`<button role="tab" aria-selected="${ana===a0&&alt===s}" data-a="${esc(a0)}" data-s="${esc(s)}">${esc(s)} (${c3[s]})</button>`).join('')+
+      `<button role="tab" aria-selected="${ana===HARITA}" data-a="${HARITA}">🗺️ Harita</button>`;
+  }else tabs.innerHTML=`<button role="tab" aria-selected="${ana===''}" data-a="">Tümü (${f.length})</button>`+
     ANA.map(a=>`<button role="tab" aria-selected="${ana===a}" data-a="${esc(a)}">${esc(a)} (${cnt[a]||0})</button>`).join('')+
     `<button role="tab" aria-selected="${ana===HARITA}" data-a="${HARITA}">🗺️ Harita</button>`;
 
-  if(ana&&ana!==HARITA){
+  if(!TEK&&ana&&ana!==HARITA){
     const c2={};f.filter(x=>x.A===ana).forEach(x=>{c2[x.S]=(c2[x.S]||0)+1});
     chips.innerHTML=`<button aria-pressed="${alt===''}" data-s="">Hepsi</button>`+
       O[ana].filter(s=>c2[s]).map(s=>`<button aria-pressed="${alt===s}" data-s="${esc(s)}">${esc(s)} (${c2[s]})</button>`).join('');
@@ -2695,7 +2773,7 @@ function draw(){
   list.innerHTML=out||'<p class="none">Sonuç yok. Süzgeçleri gevşetmeyi dene.</p>';
 }
 
-tabs.onclick=e=>{const b=e.target.closest('button');if(b){ana=b.dataset.a;alt='';draw();scrollTo(0,0)}};
+tabs.onclick=e=>{const b=e.target.closest('button');if(b){ana=b.dataset.a;alt=b.dataset.s||'';draw();scrollTo(0,0)}};
 chips.onclick=e=>{const b=e.target.closest('button');if(b){alt=b.dataset.s;draw()}};
 ic.onchange=()=>{mahalleListe();draw()};
 mq.oninput=()=>{mahalleListe();draw()};
