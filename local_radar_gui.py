@@ -52,6 +52,7 @@ METINLER = {
         "mod_ozel": "Özel Seçim",
         "mod_hizli": "Hızlı (yemek ve gezi, tek parça)",
         "mod_normal": "Normal (yemek ve gezi, ızgaralı)",
+        "mod_yemek": "Sadece yemek (kasap dahil)",
         "mod_kapsamli": "Kapsamlı (her şey, ızgaralı)",
         "mod_sabit": "Sabit ızgara (hücre boyutu km)",
     },
@@ -94,6 +95,7 @@ METINLER = {
         "mod_ozel": "Custom Selection",
         "mod_hizli": "Fast (food + attractions, single pass)",
         "mod_normal": "Normal (food + attractions, grid)",
+        "mod_yemek": "Food only (incl. butcher)",
         "mod_kapsamli": "Comprehensive (everything, grid)",
         "mod_sabit": "Fixed grid (cell size in km)",
     }
@@ -417,7 +419,7 @@ class Pencere:
         self.mod_kutu = ttk.Combobox(
             mod_frame,
             textvariable=self.mod_var,
-            values=[t("mod_ozel"), t("mod_hizli"), t("mod_normal"), t("mod_kapsamli"), t("mod_sabit")],
+            values=[t("mod_ozel"), t("mod_hizli"), t("mod_normal"), t("mod_yemek"), t("mod_kapsamli"), t("mod_sabit")],
             state="readonly",
             width=34,
         )
@@ -626,6 +628,13 @@ class Pencere:
             self.tumu.set(False)
             self.izgara.set(True)
             self.sabit_izgara.set(False)
+        elif mod == t("mod_yemek"):
+            self.yemek.set(True)
+            self.gezi.set(False); self.alisveris.set(False); self.saglik.set(False)
+            self.oto.set(False); self.konaklama.set(False); self.banka.set(False)
+            self.tumu.set(False)
+            self.izgara.set(True)
+            self.sabit_izgara.set(False)
         elif mod == t("mod_kapsamli"):
             for v in self.kategoriler.values():
                 v.set(True)
@@ -656,6 +665,12 @@ class Pencere:
         except Exception:
             return 1.0
 
+    def _yemek_sadece_mi(self):
+        """Sadece Yemek kutusu işaretliyse (etiketten bağımsız) yemek çıktısı üretilir."""
+        diger = [self.gezi, self.alisveris, self.saglik, self.oto, self.konaklama, self.banka]
+        return bool(self.yemek.get() and not any(k.get() for k in diger)
+                    and not self.tumu.get() and not self.ozel_arama.get().strip())
+
     def ayarlar(self):
         return {
             "hizli": self.hizli.get(), "paralel": self._paralel_oku(), "tekrar": self.tekrar.get(),
@@ -666,6 +681,7 @@ class Pencere:
             "izgara": self.izgara.get(), "ham": self.ham.get(), "devam": self.devam.get(),
             "sabit_izgara": self.sabit_izgara.get(), "hucre_km": self._hucre_km_oku(),
             "dil": self.dil.get(),
+            "yemek_sadece": self._yemek_sadece_mi(),
             "kategori_esikleri": self._kategori_esikleri_kayitlik(),
             **{k: v.get() for k, v in self.kategoriler.items()},
         }
@@ -1014,6 +1030,7 @@ class Pencere:
         v = dict(ilce=self.ilce.get().strip(), il=self.il.get().strip(), mahalle=self.mahalle.get(),
                  yaricap=self.yaricap.get().strip(), min_puan=min_puan, min_oy=min_oy,
                  yemek=self.yemek.get(), gezi=self.gezi.get(), alisveris=self.alisveris.get(),
+                 yemek_sadece=self._yemek_sadece_mi(),
                  saglik=self.saglik.get(), oto=self.oto.get(), konaklama=self.konaklama.get(),
                  banka=self.banka.get(), tumu=self.tumu.get(), ozel_arama=self.ozel_arama.get(),
                  mahalle_bul=self.mahalle_bul.get(), goster=self.goster.get(),
@@ -1080,8 +1097,10 @@ class Pencere:
                 bolumler = g.BOLUMLER
             else:
                 if v["yemek"]:
-                    kategoriler += g.YEMEK
+                    kategoriler += g.YEMEK + ["kasap"]
                     bolumler += ["Kebap & Et", "Restoran", "Hızlı Atıştırmalık", "Tatlı & Pastane", "Kafe & Kahvaltı"]
+                    if "Alışveriş" not in bolumler:
+                        bolumler.append("Alışveriş")
                 if v["gezi"]:
                     kategoriler += g.GEZI
                     if "Gezilecek yerler" not in bolumler:
@@ -1135,6 +1154,8 @@ class Pencere:
                 sabit_izgara=bool(v.get("sabit_izgara")),
                 hucre_km=float(v.get("hucre_km", 1.0)),
                 kategori_esikleri=v.get("kategori_esikleri") or {},
+                yemek_sadece=bool(v.get("yemek_sadece")),
+                alisveris_acik=bool(v.get("alisveris") or v.get("tumu")),
             )
 
             g.esikleri_yukle(ayar)
