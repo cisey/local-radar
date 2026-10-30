@@ -1,13 +1,18 @@
 """
-Local Radar - Core Engine (v1.0.0)
+Local Radar - Core Engine (v1.1.2)
 Scrapes Google Maps to find highly-rated places around you.
 
-v1.0.0 updates:
-  - All file names moved to English (Local Radar branding)
-  - Day planner (G1-G5 tags + day filter)
-  - Budget tracker (total, per person, per day)
-  - Categorization fixes (Kale Cam, Giyim Çarşısı etc.)
-  - Resilient Google selectors (self-healing + multi-fallback)
+v1.1.2 updates:
+  - Tek ve modern HTML çıktısı (eski çift HTML / sade ayrımı kaldırıldı)
+  - Yeni koyu tema (Karkamış tarzı) varsayılan şablon yapıldı
+  - Yakınımda, Rota, WP butonları tamamen kaldırıldı
+v1.1.1 updates:
+  - Stop button now works during neighborhood lookup phase
+v1.1.0 updates:
+  - Overpass: admin_level=10 (mahalle) + place=neighbourhood/suburb node desteği
+  - Neighborhood lookup: polygon + nearest node fallback (1.8 km)
+  - MAH_RE: Google Maps "Mahalle, Cadde" formatını yakalar
+  - Nominatim cache: ~250m grid (sorgu sayısı %70 azalır)
 """
 import re, csv, math, time, json, os, urllib.request, urllib.parse, urllib.error, socket, html
 
@@ -24,7 +29,7 @@ MAHALLE_TAKMA_AD = {"Fatih Sultan Mehmet": "Fatih Sultan"}
 YENI_GUN = 30
 # ========================================================
 LOG = print
-SURUM = "2026-10-08-v1.0.0-LocalRadar"
+SURUM = "2026-10-30-v1.1.2-LocalRadar"
 
 # ═══════════════════════════════════════════════════════════
 # FILE NAMES (English)
@@ -51,7 +56,7 @@ DOSYA_HEPSI_CSV = "local_radar_all.csv"
 DOSYA_HEPSI_XLSX = "local_radar_all.xlsx"
 DOSYA_HEPSI_JSON = "local_radar_all.json"
 DOSYA_HEPSI_HTML = "local_radar_all.html"
-DOSYA_HEPSI_HTML_SADE = "local_radar_all_sade.html"
+DOSYA_HEPSI_HTML_SADE = "local_radar_all.html"  # Artık tek dosya
 DOSYA_HEPSI_KML = "local_radar_all.kml"
 
 DOSYA_HAM_PREFIX = "raw_"
@@ -177,9 +182,8 @@ MODLAR = {
     "Kapsamlı (her şey, ızgaralı)":      dict(kategoriler=TUMU, izgara=True),
 }
 
-# ---------- Categorization rules (v1.1.0 - Priority & Domain Ordered) ----------
+# ---------- Categorization rules ----------
 KURALLAR = [
-    # 1. Spesifik İstisnalar (Kale Kilit, Cam Balkon, Halı Mağazası, İletişim, Hırdavat vb.)
     ("Alışveriş", "Giyim, Teknoloji, Mağaza",
      ["kale cam", "kale balkon", "kale kapı", "kale cam balkon",
       "cam balkon", "pvc", "alüminyum doğrama", "doğrama", "kale kilit", "çilingir", "anahtarcı",
@@ -192,14 +196,12 @@ KURALLAR = [
     ("Diğer", "Diğer hizmetler",
      ["internet", "halı yıka", "halı temiz", "emlak", "gayrimenkul", "mezar", "kefalet", "kooperatif"]),
 
-    # 2. Ulaşım ve Araç ("Oto Lastik Dükkanı" -> dükkan'a düşmeden önce yakalanır)
     ("Diğer", "Ulaşım ve Araç",
      ["otopark", "benzin", "petrol", "akaryakıt", "otogaz", "=shell", "=opet", "=bp", "bpet",
       "aytemiz", "alpet", "kadoil", "hypco", "sunpet", "=oto", "tamir", "lastik", "çekici",
       "vinç", "yol yardım", "yolyardım", "araç bakım", "araba yıkama", "oto yıkama",
       "kurtar", "otogar", "akü"]),
 
-    # 3. Camiler ve Sağlık & Bakım
     ("Gezilecek yerler", "Camiler", ["cami", "camii", "mescit", "mescidi"]),
     ("Diğer", "Sağlık ve Bakım",
      ["=diş", "ortodonti", "veteriner", "klinik", "clinic", "poliklinik", "hastane", "eczane",
@@ -208,7 +210,6 @@ KURALLAR = [
       "voleybol", "basketbol", "yüzme", "kuaför", "berber", "barber", "güzellik", "beauty",
       "lazer", "epilasyon", "cilt bakım", "=salon", "=saloon"]),
 
-    # 4. Yemek (Önce spesifik mutfaklar, en son genel Restoran/Lokanta)
     ("Kebap & Et", "Kebap",
      ["kebap", "kebab", "ciğer", "ciger", "dürüm", "döner", "iskender", "köfteci",
       "ocakbaşı", "mangal", "kavurma", "et lokantası"]),
@@ -225,7 +226,6 @@ KURALLAR = [
      ["restoran", "restaurant", "lokanta", "ev yemek", "balık", "sofra",
       "nohutçu", "kelle paça", "beyran", "dinlenme tesisi", "tesisleri"]),
 
-    # 5. Kargo, Banka, Konaklama, Evcil Hayvan, Çiçekçi, Düğün & Organizasyon
     ("Diğer", "Kargo ve Posta",
      ["kargo", "=ptt", "yurtiçi", "=aras", "=mng", "sürat", "=dhl", "=ups", "postane"]),
     ("Diğer", "Banka ve ATM",
@@ -239,7 +239,6 @@ KURALLAR = [
     ("Diğer", "Düğün ve Organizasyon",
      ["düğün", "dugun", "nikah", "organizasyon", "davet evi", "kır düğün", "kır düğünü", "plaza", "garden"]),
 
-    # 6. Gezilecek yerler (Kamp alanı / Su kenarı Fıstık'tan önce yakalanır)
     ("Gezilecek yerler", "Eğlence ve Sanat",
      ["eğlence", "=oyun", "game center", "sinema", "tiyatro",
       "sanat galeri", "sanat merkezi", "kültür merkezi"]),
@@ -250,7 +249,6 @@ KURALLAR = [
       "kapalı çarşı", "kilise", "sinagog", "kervansaray", "mozaik",
       "anıt", "=han", "=hanı", "tapınağı", "tapınak", "su kenarı", "bügeti"]),
 
-    # 7. Alışveriş (Genel Market ve Mağaza kelimeleri en sonda)
     ("Alışveriş", "Market, Fırın, Kasap",
      ["fıstık", "fırın", "unlu", "ekmek", "market", "migros", "carrefour",
       "=avm", "alışveriş merkezi", "gross", "=bim", "=şok", "=a101", "a-101", "a.101",
@@ -581,7 +579,11 @@ def detay_topla(sayfa, link):
     }
 
 
-MAH_RE = re.compile(r"(?:^|,\s*)([^,\d]+?)\s+(?:mahallesi|mahalle|mah\.|mah\b|mh\.)", re.I)
+MAH_RE = re.compile(
+    r"(?:^|,\s*)([^,\d]+?)\s+(?:mahallesi|mahalle|mah\.|mah\b|mh\.|mh\b)"
+    r"|^([A-ZÇĞİÖŞÜa-zçğıöşü\s]{3,25}?),\s*(?:[^,\d]+\s+(?:cd|cad|caddesi|sk|sok|sokak|blv|bulvar|bulvarı)\b)",
+    re.I
+)
 
 
 def tr_title(s):
@@ -612,7 +614,7 @@ def mahalle_yaz(ad, tur="suburb"):
 def nominatim(lat, lon):
     url = "https://nominatim.openstreetmap.org/reverse?" + urllib.parse.urlencode(
         {"format": "jsonv2", "lat": lat, "lon": lon, "zoom": 16, "addressdetails": 1, "accept-language": "tr"})
-    istek = urllib.request.Request(url, headers={"User-Agent": "local-radar/1.0"})
+    istek = urllib.request.Request(url, headers={"User-Agent": "local-radar/1.1"})
     for _ in range(2):
         try:
             with urllib.request.urlopen(istek, timeout=15) as r:
@@ -636,7 +638,7 @@ ALANLAR = ["Yer", "İlçe", "Mahalle", "Bölüm", "Grup", "Puan", "Yorum Sayıs�
 HAVUZ_ALANLAR = ALANLAR + ["İlk Görülme", "Son Görülme", "Telefon", "Web", "Adres2", "Detay Tarihi"]
 
 
-def kayitlari_hazirla(kartlar, ayar, min_puan=MIN_PUAN, min_oy=MIN_OY, mahalle_aktif=MAHALLE_BUL):
+def kayitlari_hazirla(kartlar, ayar, min_puan=MIN_PUAN, min_oy=MIN_OY, mahalle_aktif=MAHALLE_BUL, durdur=lambda: False):
     onbellek = {}
     if os.path.exists(ONBELLEK_DOSYASI):
         try:
@@ -712,6 +714,9 @@ def kayitlari_hazirla(kartlar, ayar, min_puan=MIN_PUAN, min_oy=MIN_OY, mahalle_a
 
     kayitlar = []
     for i, (k, puan, oy, lat, lon, tur, adres, fiyat, bolum, grup, puansiz_mi) in enumerate(adaylar, 1):
+        if durdur():
+            LOG("   ⏹ Kullanıcı tarafından durduruldu (kalan yerler mahallesiz eklenecek).")
+            mahalle_aktif = False
         if mahalle_aktif and i % 10 == 0:
             LOG(f"   Neighborhood lookup: {i}/{len(adaylar)}")
         if puansiz_mi:
@@ -733,6 +738,8 @@ def kayitlari_hazirla(kartlar, ayar, min_puan=MIN_PUAN, min_oy=MIN_OY, mahalle_a
         m_ = MAHALLE_ISTATISTIK
         LOG(f"Neighborhood source: boundaries {m_['sinir']} · address text {m_['adres']} · "
             f"internet {m_['internet']} · not found {m_['yok']}")
+    elif adaylar:
+        LOG("   ⏹ Mahalle araması kullanıcı tarafından durduruldu.")
 
     benzersiz = {}
     for r in kayitlar:
@@ -843,7 +850,7 @@ def xlsx_yaz(kayitlar, yol, alanlar=None):
         hucre.alignment = Alignment(vertical="center")
 
     yesil = (PatternFill("solid", fgColor="C6EFCE"), Font(color="006100", bold=True))
-    sari = (PatternFill("solid", fgColor="FFEB9C"), Font(color="9C6500", bold=True))
+    sari = (PatternFill("solid", fgColor="FFEB9C"), Font(color="9C0006", bold=True))
     kirmizi = (PatternFill("solid", fgColor="FFC7CE"), Font(color="9C0006", bold=True))
 
     puan_sutun = alanlar.index("Puan") + 1
@@ -882,15 +889,13 @@ def _yeni_mi(tarih):
         return False
 
 
-# Leaflet harita stili dogrudan sayfaya gomulur (disaridan yukleme yok; CSP/ofline sorunlarini onler).
 LEAFLET_CSS = r""".leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-tile-container,.leaflet-pane>svg,.leaflet-pane>canvas,.leaflet-zoom-box,.leaflet-image-layer,.leaflet-layer{position:absolute;left:0;top:0;}.leaflet-container{overflow:hidden;}.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow{-webkit-user-select:none;-moz-user-select:none;user-select:none;-webkit-user-drag:none;}.leaflet-tile::selection{background:transparent;}.leaflet-safari .leaflet-tile{image-rendering:-webkit-optimize-contrast;}.leaflet-safari .leaflet-tile-container{width:1600px;height:1600px;-webkit-transform-origin:0 0;}.leaflet-marker-icon,.leaflet-marker-shadow{display:block;}.leaflet-container .leaflet-overlay-pane svg{max-width:none !important;max-height:none !important;}.leaflet-container .leaflet-marker-pane img,.leaflet-container .leaflet-shadow-pane img,.leaflet-container .leaflet-tile-pane img,.leaflet-container img.leaflet-image-layer,.leaflet-container .leaflet-tile{max-width:none !important;max-height:none !important;width:auto;padding:0;}.leaflet-container img.leaflet-tile{mix-blend-mode:plus-lighter;}.leaflet-container.leaflet-touch-zoom{-ms-touch-action:pan-x pan-y;touch-action:pan-x pan-y;}.leaflet-container.leaflet-touch-drag{-ms-touch-action:pinch-zoom;touch-action:none;touch-action:pinch-zoom;}.leaflet-container.leaflet-touch-drag.leaflet-touch-zoom{-ms-touch-action:none;touch-action:none;}.leaflet-container{-webkit-tap-highlight-color:transparent;}.leaflet-container a{-webkit-tap-highlight-color:rgba(51,181,229,0.4);}.leaflet-tile{filter:inherit;visibility:hidden;}.leaflet-tile-loaded{visibility:inherit;}.leaflet-zoom-box{width:0;height:0;-moz-box-sizing:border-box;box-sizing:border-box;z-index:800;}.leaflet-overlay-pane svg{-moz-user-select:none;}.leaflet-pane{z-index:400;}.leaflet-tile-pane{z-index:200;}.leaflet-overlay-pane{z-index:400;}.leaflet-shadow-pane{z-index:500;}.leaflet-marker-pane{z-index:600;}.leaflet-tooltip-pane{z-index:650;}.leaflet-popup-pane{z-index:700;}.leaflet-map-pane canvas{z-index:100;}.leaflet-map-pane svg{z-index:200;}.leaflet-vml-shape{width:1px;height:1px;}.lvml{behavior:url(#default#VML);display:inline-block;position:absolute;}.leaflet-control{position:relative;z-index:800;pointer-events:visiblePainted;pointer-events:auto;}.leaflet-top,.leaflet-bottom{position:absolute;z-index:1000;pointer-events:none;}.leaflet-top{top:0;}.leaflet-right{right:0;}.leaflet-bottom{bottom:0;}.leaflet-left{left:0;}.leaflet-control{float:left;clear:both;}.leaflet-right .leaflet-control{float:right;}.leaflet-top .leaflet-control{margin-top:10px;}.leaflet-bottom .leaflet-control{margin-bottom:10px;}.leaflet-left .leaflet-control{margin-left:10px;}.leaflet-right .leaflet-control{margin-right:10px;}.leaflet-fade-anim .leaflet-popup{opacity:0;-webkit-transition:opacity 0.2s linear;-moz-transition:opacity 0.2s linear;transition:opacity 0.2s linear;}.leaflet-fade-anim .leaflet-map-pane .leaflet-popup{opacity:1;}.leaflet-zoom-animated{-webkit-transform-origin:0 0;-ms-transform-origin:0 0;transform-origin:0 0;}svg.leaflet-zoom-animated{will-change:transform;}.leaflet-zoom-anim .leaflet-zoom-animated{-webkit-transition:-webkit-transform 0.25s cubic-bezier(0,0,0.25,1);-moz-transition:-moz-transform 0.25s cubic-bezier(0,0,0.25,1);transition:transform 0.25s cubic-bezier(0,0,0.25,1);}.leaflet-zoom-anim .leaflet-tile,.leaflet-pan-anim .leaflet-tile{-webkit-transition:none;-moz-transition:none;transition:none;}.leaflet-zoom-anim .leaflet-zoom-hide{visibility:hidden;}.leaflet-interactive{cursor:pointer;}.leaflet-grab{cursor:-webkit-grab;cursor:-moz-grab;cursor:grab;}.leaflet-crosshair,.leaflet-crosshair .leaflet-interactive{cursor:crosshair;}.leaflet-popup-pane,.leaflet-control{cursor:auto;}.leaflet-dragging .leaflet-grab,.leaflet-dragging .leaflet-grab .leaflet-interactive,.leaflet-dragging .leaflet-marker-draggable{cursor:move;cursor:-webkit-grabbing;cursor:-moz-grabbing;cursor:grabbing;}.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-image-layer,.leaflet-pane>svg path,.leaflet-tile-container{pointer-events:none;}.leaflet-marker-icon.leaflet-interactive,.leaflet-image-layer.leaflet-interactive,.leaflet-pane>svg path.leaflet-interactive,svg.leaflet-image-layer.leaflet-interactive path{pointer-events:visiblePainted;pointer-events:auto;}.leaflet-container{background:#ddd;outline-offset:1px;}.leaflet-container a{color:#0078A8;}.leaflet-zoom-box{border:2px dotted #38f;background:rgba(255,255,255,0.5);}.leaflet-container{font-family:"Helvetica Neue",Arial,Helvetica,sans-serif;font-size:12px;font-size:0.75rem;line-height:1.5;}.leaflet-bar{box-shadow:0 1px 5px rgba(0,0,0,0.65);border-radius:4px;}.leaflet-bar a{background-color:#fff;border-bottom:1px solid #ccc;width:26px;height:26px;line-height:26px;display:block;text-align:center;text-decoration:none;color:black;}.leaflet-bar a,.leaflet-control-layers-toggle{background-position:50% 50%;background-repeat:no-repeat;display:block;}.leaflet-bar a:hover,.leaflet-bar a:focus{background-color:#f4f4f4;}.leaflet-bar a:first-child{border-top-left-radius:4px;border-top-right-radius:4px;}.leaflet-bar a:last-child{border-bottom-left-radius:4px;border-bottom-right-radius:4px;border-bottom:none;}.leaflet-bar a.leaflet-disabled{cursor:default;background-color:#f4f4f4;color:#bbb;}.leaflet-touch .leaflet-bar a{width:30px;height:30px;line-height:30px;}.leaflet-touch .leaflet-bar a:first-child{border-top-left-radius:2px;border-top-right-radius:2px;}.leaflet-touch .leaflet-bar a:last-child{border-bottom-left-radius:2px;border-bottom-right-radius:2px;}.leaflet-control-zoom-in,.leaflet-control-zoom-out{font:bold 18px 'Lucida Console',Monaco,monospace;text-indent:1px;}.leaflet-touch .leaflet-control-zoom-in,.leaflet-touch .leaflet-control-zoom-out{font-size:22px;}.leaflet-control-layers{box-shadow:0 1px 5px rgba(0,0,0,0.4);background:#fff;border-radius:5px;}.leaflet-control-layers-toggle{background-image:none;width:36px;height:36px;}.leaflet-retina .leaflet-control-layers-toggle{background-image:none;background-size:26px 26px;}.leaflet-touch .leaflet-control-layers-toggle{width:44px;height:44px;}.leaflet-control-layers .leaflet-control-layers-list,.leaflet-control-layers-expanded .leaflet-control-layers-toggle{display:none;}.leaflet-control-layers-expanded .leaflet-control-layers-list{display:block;position:relative;}.leaflet-control-layers-expanded{padding:6px 10px 6px 6px;color:#333;background:#fff;}.leaflet-control-layers-scrollbar{overflow-y:scroll;overflow-x:hidden;padding-right:5px;}.leaflet-control-layers-selector{margin-top:2px;position:relative;top:1px;}.leaflet-control-layers label{display:block;font-size:13px;font-size:1.08333em;}.leaflet-control-layers-separator{height:0;border-top:1px solid #ddd;margin:5px -10px 5px -6px;}.leaflet-default-icon-path{background-image:none;}.leaflet-container .leaflet-control-attribution{background:#fff;background:rgba(255,255,255,0.8);margin:0;}.leaflet-control-attribution,.leaflet-control-scale-line{padding:0 5px;color:#333;line-height:1.4;}.leaflet-control-attribution a{text-decoration:none;}.leaflet-control-attribution a:hover,.leaflet-control-attribution a:focus{text-decoration:underline;}.leaflet-attribution-flag{display:inline !important;vertical-align:baseline !important;width:1em;height:0.6669em;}.leaflet-left .leaflet-control-scale{margin-left:5px;}.leaflet-bottom .leaflet-control-scale{margin-bottom:5px;}.leaflet-control-scale-line{border:2px solid #777;border-top:none;line-height:1.1;padding:2px 5px 1px;white-space:nowrap;-moz-box-sizing:border-box;box-sizing:border-box;background:rgba(255,255,255,0.8);text-shadow:1px 1px #fff;}.leaflet-control-scale-line:not(:first-child){border-top:2px solid #777;border-bottom:none;margin-top:-2px;}.leaflet-control-scale-line:not(:first-child):not(:last-child){border-bottom:2px solid #777;}.leaflet-touch .leaflet-control-attribution,.leaflet-touch .leaflet-control-layers,.leaflet-touch .leaflet-bar{box-shadow:none;}.leaflet-touch .leaflet-control-layers,.leaflet-touch .leaflet-bar{border:2px solid rgba(0,0,0,0.2);background-clip:padding-box;}.leaflet-popup{position:absolute;text-align:center;margin-bottom:20px;}.leaflet-popup-content-wrapper{padding:1px;text-align:left;border-radius:12px;}.leaflet-popup-content{margin:13px 24px 13px 20px;line-height:1.3;font-size:13px;font-size:1.08333em;min-height:1px;}.leaflet-popup-content p{margin:17px 0;margin:1.3em 0;}.leaflet-popup-tip-container{width:40px;height:20px;position:absolute;left:50%;margin-top:-1px;margin-left:-20px;overflow:hidden;pointer-events:none;}.leaflet-popup-tip{width:17px;height:17px;padding:1px;margin:-10px auto 0;pointer-events:auto;-webkit-transform:rotate(45deg);-moz-transform:rotate(45deg);-ms-transform:rotate(45deg);transform:rotate(45deg);}.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:white;color:#333;box-shadow:0 3px 14px rgba(0,0,0,0.4);}.leaflet-container a.leaflet-popup-close-button{position:absolute;top:0;right:0;border:none;text-align:center;width:24px;height:24px;font:16px/24px Tahoma,Verdana,sans-serif;color:#757575;text-decoration:none;background:transparent;}.leaflet-container a.leaflet-popup-close-button:hover,.leaflet-container a.leaflet-popup-close-button:focus{color:#585858;}.leaflet-popup-scrolled{overflow:auto;}.leaflet-oldie .leaflet-popup-content-wrapper{-ms-zoom:1;}.leaflet-oldie .leaflet-popup-tip{width:24px;margin:0 auto;-ms-filter:"progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678,M12=0.70710678,M21=-0.70710678,M22=0.70710678)";filter:progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678,M12=0.70710678,M21=-0.70710678,M22=0.70710678);}.leaflet-oldie .leaflet-control-zoom,.leaflet-oldie .leaflet-control-layers,.leaflet-oldie .leaflet-popup-content-wrapper,.leaflet-oldie .leaflet-popup-tip{border:1px solid #999;}.leaflet-div-icon{background:#fff;border:1px solid #666;}.leaflet-tooltip{position:absolute;padding:6px;background-color:#fff;border:1px solid #fff;border-radius:3px;color:#222;white-space:nowrap;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,0.4);}.leaflet-tooltip.leaflet-interactive{cursor:pointer;pointer-events:auto;}.leaflet-tooltip-top:before,.leaflet-tooltip-bottom:before,.leaflet-tooltip-left:before,.leaflet-tooltip-right:before{position:absolute;pointer-events:none;border:6px solid transparent;background:transparent;content:"";}.leaflet-tooltip-bottom{margin-top:6px;}.leaflet-tooltip-top{margin-top:-6px;}.leaflet-tooltip-bottom:before,.leaflet-tooltip-top:before{left:50%;margin-left:-6px;}.leaflet-tooltip-top:before{bottom:0;margin-bottom:-12px;border-top-color:#fff;}.leaflet-tooltip-bottom:before{top:0;margin-top:-12px;margin-left:-6px;border-bottom-color:#fff;}.leaflet-tooltip-left{margin-left:-6px;}.leaflet-tooltip-right{margin-left:6px;}.leaflet-tooltip-left:before,.leaflet-tooltip-right:before{top:50%;margin-top:-6px;}.leaflet-tooltip-left:before{right:0;margin-right:-12px;border-left-color:#fff;}.leaflet-tooltip-right:before{left:0;margin-left:-12px;border-right-color:#fff;}@media print{.leaflet-control{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}"""
 
 
-# ---------- Yemek alt kategorileri (sadece yemek çıktısı ve Kasap ayrımı) ----------
+# ---------- Yemek alt kategorileri ----------
 YEMEK_ALT_SIRA = ["Döner & Kebap", "Çiğ Köfte", "Pide & Lahmacun", "Fast food & Burger & Pizza",
                   "Türk & Aile Restoranı", "Kafe & Kahve", "Kahvaltı", "Fırın & Tatlı", "Kasap"]
 
-# Anahtar kelimeler fold() ile yazılır (ç->c, ğ->g, ı->i, ö->o, ş->s, ü->u)
 _YEMEK_ALT_KURAL = [
     ("Kasap", ["kasap", "sarkuteri", "kasab"]),
     ("Çiğ Köfte", ["cig kofte", "cigkofte"]),
@@ -906,7 +911,6 @@ _YEMEK_ALT_KURAL = [
 
 
 def yemek_alt(r):
-    """Kaydın yemek alt kategorisini döndürür; yemek değilse None."""
     bolum = r.get("Bölüm", "")
     if not (ANA.get(bolum) == "Yemek" or bolum == "Alışveriş"):
         return None
@@ -915,6 +919,273 @@ def yemek_alt(r):
         if any(k in m for k in kws):
             return alt
     return "Türk & Aile Restoranı" if ANA.get(bolum) == "Yemek" else None
+
+
+# ============================================================
+# TEK VE MODERN HTML ÇIKTISI (Karkamış Teması)
+# ============================================================
+SABLON = r"""<!DOCTYPE html>
+<html lang="tr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>__BASLIK__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>__LEAFLET_CSS__</style>
+<style>
+:root {
+  --bg: #f3f4f6; --card: #ffffff; --text: #111827; --muted: #6b7280;
+  --line: #e5e7eb; --accent: #2563eb; --accent-soft: rgba(37,99,235,.08); --gold: #d97706;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme:dark){
+  :root {
+    --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --muted: #94a3b8;
+    --line: #334155; --accent: #3b82f6; --accent-soft: rgba(59,130,246,.15); --gold: #fbbf24;
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;line-height:1.45;padding:12px 12px 56px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:580px;margin:0 auto}
+a.back{display:inline-block;color:var(--muted);text-decoration:none;font-size:13px;font-weight:600;padding:4px 2px 10px}
+.head{padding:0 2px 12px}
+h1{font-size:22px;font-weight:800;letter-spacing:-.03em;color:var(--text)}
+.sub-meta{color:var(--muted);font-size:13px;margin-top:4px;font-weight:500}
+.filters{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.frow{display:flex;gap:8px}
+.frow>*{flex:1;min-width:0}
+input,select{width:100%;font:inherit;font-size:14px;padding:11px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--text);outline:none;transition:all 0.2s}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.frow input,.frow select{font-size:13px;padding:10px}
+input:focus,select:focus{border-color:var(--accent)}
+input::placeholder{color:var(--muted)}
+.reset{align-self:flex-end;background:none;border:0;color:var(--muted);font:inherit;font-size:12.5px;font-weight:600;padding:2px 4px;cursor:pointer}
+.tabs,.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.tabs button,.chips button{flex:0 0 auto;font:inherit;font-size:13px;font-weight:600;color:var(--muted);background:transparent;border:1px solid var(--line);border-radius:99px;padding:6px 13px;cursor:pointer}
+.tabs button:hover,.chips button:hover{border-color:var(--muted);color:var(--text)}
+.tabs button[aria-selected="true"],.chips button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:700}
+h2{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:18px 4px 8px}
+#list>div{background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.04);margin-bottom:16px}
+@media (prefers-color-scheme:dark){#list>div{box-shadow:0 4px 20px rgba(0,0,0,0.2)}}
+.row{position:relative;display:flex;align-items:center;gap:16px;padding:16px 18px;border-bottom:1px solid var(--line);transition:background 0.15s}
+.row:last-child{border-bottom:0}
+@media (prefers-color-scheme:dark){.row:hover{background:rgba(255,255,255,0.02)}}
+.row:last-child{border-bottom:0}
+.row:hover{background:rgba(0,0,0,0.015)}
+@media (prefers-color-scheme:dark){.row:hover{background:rgba(255,255,255,0.03)}}
+.row:active{background:var(--accent-soft)}
+.pt{flex:0 0 44px;text-align:center}
+.pt b{display:block;font-size:16px;font-weight:800;color:var(--gold);letter-spacing:-0.02em}
+.pt small{display:block;font-size:11.5px;color:var(--muted);margin-top:3px}
+.body{flex:1;min-width:0}
+.nm{font-weight:700;font-size:15px;overflow-wrap:anywhere}
+a.nm-link{color:inherit;text-decoration:none}
+a.nm-link::after{content:'';position:absolute;inset:0}
+.meta-tags{font-size:12.5px;color:var(--muted);margin-top:4px;line-height:1.4}
+.meta-adres{font-size:12.5px;color:var(--muted);margin-top:3px;overflow-wrap:anywhere;line-height:1.4}
+.map-btn{display:inline-flex;align-items:center;justify-content:center;padding:8px 14px;border-radius:10px;background:var(--accent-soft);color:var(--accent);font-size:13px;font-weight:700;text-decoration:none;position:relative;z-index:2;white-space:nowrap;margin-left:10px;flex-shrink:0;transition:background 0.2s}
+.map-btn:hover{background:var(--accent);color:#fff}
+.foot{color:var(--muted);font-size:11.5px;margin-top:32px;text-align:center}
+.none{color:var(--muted);text-align:center;padding:40px 0}
+#map{display:none;height:60vh;border-radius:16px;border:1px solid var(--line)}
+</style>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head><body><div class="wrap">
+
+<a class="back" href="https://cisey.github.io/LocalRadar/">← Rehberler</a>
+
+<div class="head">
+  <h1>📡 __BASLIK__</h1>
+  <div class="sub-meta">__TARIH__ · <span id="yerSayisi">0</span> mekan</div>
+</div>
+
+<div class="filters">
+  <input id="q" type="search" placeholder="🔍 Mekan, yemek veya mahalle ara">
+  <input id="mq" type="hidden">
+  <div class="frow">
+    <select id="mh" aria-label="Mahalle"></select>
+    <select id="sirala" aria-label="Sıralama">
+      <option value="skor">Güvenilir Skor</option>
+      <option value="puan">Puan (Yüksek)</option>
+      <option value="yorum">Yorum (Çok)</option>
+      <option value="yakin">Bana Yakın</option>
+    </select>
+  </div>
+  <div class="frow">
+    <input id="mp" type="number" step="0.1" inputmode="decimal" placeholder="En az puan">
+    <input id="my" type="number" step="10" inputmode="numeric" placeholder="En az yorum">
+    <select id="gs" aria-label="Görünüm" style="display:none;">
+      <option value="">Tümü</option>
+    </select>
+  </div>
+  <select id="ic" aria-label="İlçe" style="display:none;"></select>
+  <button class="reset" onclick="tumVerileriTemizle()">↺ Sıfırla</button>
+</div>
+
+<div class="tabs" id="tabs" role="tablist"></div>
+<div class="chips" id="chips"></div>
+
+<div id="map"></div>
+<div id="list"></div>
+
+<p class="foot">📡 Local Radar · Google Maps verileri · Harita: © OpenStreetMap</p>
+</div>
+
+<script>
+const V=__DATA__,O=V.O,I=V.I,ANA=Object.keys(O);
+let ana='',alt='',map=null,katman=null;
+const HARITA='__MAP__';
+const RENK={'Yemek':'#fb923c','Gezilecek yerler':'#38bdf8','Alışveriş':'#34d399','Diğer':'#94a3b8'};
+const $=id=>document.getElementById(id);
+const tabs=$('tabs'),chips=$('chips'),list=$('list'),q=$('q'),mh=$('mh'),mq=$('mq'),ic=$('ic'),mp=$('mp'),my=$('my'),sirala=$('sirala'),gs=$('gs'),mapEl=$('map'),yerSayisi=$('yerSayisi');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const tl=s=>String(s).toLocaleLowerCase('tr');
+
+function durumOku(){try{return JSON.parse(localStorage.getItem('gezi_durum')||'{}')}catch(e){return {}}}
+function durumYaz(){try{localStorage.setItem('gezi_durum',JSON.stringify(durum))}catch(e){}}
+let durum=durumOku();
+let konum=null;
+
+function km(a,b,c,d){const t=x=>x*Math.PI/180,R=6371,dl=t(c-a),dg=t(d-b);
+  const h=Math.sin(dl/2)**2+Math.cos(t(a))*Math.cos(t(c))*Math.sin(dg/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
+function uzak(x){return(konum&&x.e!=null)?km(konum.lat,konum.lon,x.e,x.b):null}
+
+function konumAl(sonra){
+  if(!navigator.geolocation)return;
+  navigator.geolocation.getCurrentPosition(
+    p=>{konum={lat:p.coords.latitude,lon:p.coords.longitude};if(sonra)sonra();},
+    null,{enableHighAccuracy:true,timeout:10000});
+}
+
+const ilceler=[...new Set(I.map(x=>x.c).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'tr'));
+if(ilceler.length>=2) {
+  ic.style.display='';
+  ic.innerHTML='<option value="">Tüm ilçeler</option>'+ilceler.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+}
+
+const mahSayisi=new Set(I.filter(x=>x.m!=='Bilinmiyor').map(x=>x.c+'|'+x.m)).size;
+function mahalleListe(){
+  if(mahSayisi<2){mh.style.display='none';return;}
+  const c=ic.value,t=tl(mq.value.trim()),say={};
+  I.forEach(x=>{if((c&&x.c!==c)||x.m==='Bilinmiyor')return;const k=x.c+'|'+x.m;say[k]=(say[k]||0)+1});
+  const ks=Object.keys(say).filter(k=>tl(k.split('|')[1]).includes(t)).sort((a,b)=>a.split('|')[1].localeCompare(b.split('|')[1],'tr'));
+  const onceki=mh.value;
+  mh.innerHTML='<option value="">Tüm mahalleler</option>'+ks.map(k=>{const p=k.split('|');
+    return `<option value="${esc(k)}">${esc(p[1])}${(!c&&p[0])?' · '+esc(p[0]):''} (${say[k]})</option>`}).join('');
+  if(ks.includes(onceki))mh.value=onceki;
+}
+
+function ok(x){
+  const t=tl(q.value.trim()),p0=parseFloat(mp.value)||0,y0=parseInt(my.value,10)||0;
+  return (!ic.value||x.c===ic.value)&&(!mh.value||(x.c+'|'+x.m)===mh.value)&&
+    (!t||tl(x.n+' '+x.t+' '+x.m).includes(t))&&(p0===0&&y0===0&&x.u ? true : (parseFloat(x.p.replace(',','.'))>=p0&&(x.y||0)>=y0))&&
+    (gs.value===''||(gs.value==='fav'&&(durum[x.l]||{}).fav));
+}
+
+function kiyas(a,b){
+  const s=sirala.value;
+  if(s==='puan')return parseFloat(b.p.replace(',','.'))-parseFloat(a.p.replace(',','.'));
+  if(s==='yorum')return b.y-a.y;
+  if(s==='yakin'){ if(!konum){konumAl(draw);return 0;} return (uzak(a)??1e9)-(uzak(b)??1e9); }
+  return b.s-a.s;
+}
+
+function haritaCiz(){
+  list.style.display='none';mapEl.style.display='block';
+  if(!map){
+    map=L.map('map');
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  }
+  setTimeout(()=>map.invalidateSize(),60);
+  if(katman)map.removeLayer(katman);
+  const pts=I.filter(x=>ok(x)&&typeof x.e==='number'&&typeof x.b==='number');
+  const isaretler=pts.map(x=>L.circleMarker([x.e,x.b],{radius:7,weight:2,color:'#fff',fillColor:RENK[x.A]||'#3b82f6',fillOpacity:.9})
+    .bindPopup('<b>'+esc(x.n)+'</b><br>⭐ '+esc(x.p)+' · '+x.y+' yorum<br>'+esc(x.m!=='Bilinmiyor'?x.m:'')+
+      '<br><a href="'+esc(x.l)+'" target="_blank" rel="noopener">Google Haritalar\'da aç</a>'));
+  katman=L.featureGroup(isaretler).addTo(map);
+  if(pts.length)map.fitBounds(katman.getBounds().pad(0.15));
+  else map.setView([37.0,37.5],10);
+}
+
+function satir(x){
+  const puan=x.u?'<b>—</b><small>puansız</small>':`<b>★ ${x.p}</b><small>${x.y} oy</small>`;
+  const mah=x.m!=='Bilinmiyor'?x.m.replace(' Mahallesi',''):'';
+  const meta=[x.t,mah].filter(Boolean).map(esc).join(' · ');
+  return `<div class="row">
+    <div class="pt">${puan}</div>
+    <div class="body">
+      <div class="nm"><a class="nm-link" href="#" onclick="return false;" style="cursor:default;text-decoration:none;">${esc(x.n)}</a></div>
+      ${meta?`<div class="meta-tags">${meta}</div>`:''}
+      ${x.a?`<div class="meta-adres">${esc(x.a)}</div>`:''}
+    </div>
+    <a class="map-btn" href="${esc(x.l)}" target="_blank" rel="noopener">🗺️ Haritada Aç</a>
+  </div>`;
+}
+
+function tumVerileriTemizle(){
+  if(!confirm('Tüm favoriler ve filtreler sıfırlansın mı?'))return;
+  localStorage.removeItem('gezi_durum');
+  durum={};
+  ic.value='';mq.value='';mahalleListe();mh.value='';
+  mp.value='';my.value='';q.value='';
+  sirala.value='skor';gs.value='';ana='';alt='';
+  draw();
+}
+
+function draw(){
+  if(ana===HARITA){haritaCiz();}
+  else{mapEl.style.display='none';list.style.display='';}
+  const f=I.filter(ok),arama=q.value.trim()!=='';
+  yerSayisi.textContent=f.length;
+
+  const cnt={};f.forEach(x=>{cnt[x.A]=(cnt[x.A]||0)+1});
+  const TEK=ANA.length===1;
+  if(TEK){
+    const a0=ANA[0],c3={};f.forEach(x=>{c3[x.S]=(c3[x.S]||0)+1});
+    tabs.innerHTML=`<button role="tab" aria-selected="${ana===''}" data-a="">✨ Tümü (${f.length})</button>`+
+      O[a0].filter(s=>c3[s]).map(s=>`<button role="tab" aria-selected="${ana===a0&&alt===s}" data-a="${esc(a0)}" data-s="${esc(s)}">${esc(s)} (${c3[s]})</button>`).join('')+
+      `<button role="tab" aria-selected="${ana===HARITA}" data-a="${HARITA}">🗺️ Harita</button>`;
+  }else{
+    tabs.innerHTML=`<button role="tab" aria-selected="${ana===''}" data-a="">✨ Tümü (${f.length})</button>`+
+      ANA.map(a=>`<button role="tab" aria-selected="${ana===a}" data-a="${esc(a)}">${esc(a)} (${cnt[a]||0})</button>`).join('')+
+      `<button role="tab" aria-selected="${ana===HARITA}" data-a="${HARITA}">🗺️ Harita</button>`;
+  }
+
+  if(!TEK&&ana&&ana!==HARITA){
+    const c2={};f.filter(x=>x.A===ana).forEach(x=>{c2[x.S]=(c2[x.S]||0)+1});
+    chips.innerHTML=`<button aria-pressed="${alt===''}" data-s="">Hepsi</button>`+
+      O[ana].filter(s=>c2[s]).map(s=>`<button aria-pressed="${alt===s}" data-s="${esc(s)}">${esc(s)} (${c2[s]})</button>`).join('');
+    chips.style.display='';
+  }else chips.style.display='none';
+
+  if(ana===HARITA)return;
+
+  const sec=f.filter(x=>arama||!ana||(x.A===ana&&(!alt||x.S===alt)));
+  const tumu=arama||!ana;let out='';
+
+  ANA.forEach(a=>O[a].forEach(s=>{
+    const it=sec.filter(x=>x.A===a&&x.S===s);if(!it.length)return;
+    it.sort(kiyas);
+    const bas=tumu?a+' · '+s:(alt?'':s);
+    out+=(bas?`<h2>${esc(bas)}</h2>`:'')+'<div>'+it.map(satir).join('')+'</div>';
+  }));
+  list.innerHTML=out||'<p class="none">Aramanıza uygun mekan bulunamadı.</p>';
+}
+
+tabs.onclick=e=>{const b=e.target.closest('button');if(b){ana=b.dataset.a;alt=b.dataset.s||'';draw();}};
+chips.onclick=e=>{const b=e.target.closest('button');if(b){alt=b.dataset.s;draw()}};
+ic.onchange=()=>{mahalleListe();draw()};
+mh.onchange=draw;mp.oninput=draw;my.oninput=draw;q.oninput=draw;gs.onchange=draw;sirala.onchange=draw;
+
+mahalleListe();
+draw();
+</script></body></html>
+"""
+
+# Sade ayrımı kaldırıldığı için aynı şablona referans verildi
+SABLON_SADE = SABLON
 
 
 def html_yaz(kayitlar, ayar, yol, sade=False, yemek_sadece=False, alisveris_acik=True):
@@ -955,20 +1226,11 @@ def html_yaz(kayitlar, ayar, yol, sade=False, yemek_sadece=False, alisveris_acik
     alt = "Scan, discover, plan. Google Maps results filtered and organized by Local Radar."
     tarih = time.strftime("%d.%m.%Y")
 
-    sablon = SABLON_SADE if sade else SABLON
-    sayfa = (sablon.replace("__LEAFLET_CSS__", LEAFLET_CSS)
+    sayfa = (SABLON.replace("__LEAFLET_CSS__", LEAFLET_CSS)
              .replace("__DATA__", json.dumps(veri, ensure_ascii=False).replace("</", "<\\/"))
              .replace("__BASLIK__", ayar["baslik"])
              .replace("__ALT__", alt)
              .replace("__TARIH__", tarih))
-
-    if yemek_sadece and not sade:
-        for _satir in ('  <button class="ikon" style="margin-left:0" onclick="rotaAc()">Rotada Aç</button>\n',
-                       '  <button class="ikon" onclick="wpListe()">WP\'ye Gönder</button>\n',
-                       '  <button class="ikon" onclick="konumAl(draw)">📍 Konum Bul</button>\n'):
-            sayfa = sayfa.replace(_satir, "")
-        sayfa = sayfa.replace('<button class="ikon" onclick="tumVerileriTemizle()" style="color:#c00">',
-                              '<button class="ikon" onclick="tumVerileriTemizle()" style="margin-left:0;color:#c00">')
 
     with open(yol, "w", encoding="utf-8") as f:
         f.write(sayfa)
@@ -1071,7 +1333,7 @@ def yer_bul(*sorgular):
     for sorgu in sorgular:
         url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode(
             {"q": sorgu, "format": "jsonv2", "limit": 1, "accept-language": "tr", "countrycodes": "tr"})
-        istek = urllib.request.Request(url, headers={"User-Agent": "local-radar/1.0"})
+        istek = urllib.request.Request(url, headers={"User-Agent": "local-radar/1.1"})
         try:
             with urllib.request.urlopen(istek, timeout=15) as r:
                 sonuc = json.load(r)
@@ -1744,18 +2006,27 @@ def sinirlari_isle(veri):
     for e in veri.get("elements", []):
         etiket = e.get("tags", {})
         ad = etiket.get("name", "")
-        mahalle_gibi = ("mahalle" in fold(ad) or etiket.get("place") in
-                        ("suburb", "neighbourhood", "quarter", "village", "hamlet"))
-        if e.get("type") != "relation" or not ad or not mahalle_gibi:
+        if not ad:
             continue
-        halkalar = _halkalar_olustur(e.get("members", []))
-        if not halkalar:
+        mahalle_gibi = (
+            etiket.get("admin_level") in ("9", "10")
+            or "mahalle" in fold(ad)
+            or etiket.get("place") in ("suburb", "neighbourhood", "quarter", "village", "hamlet")
+        )
+        if not mahalle_gibi:
             continue
-        tum_nokta = [p for h in halkalar for p in h]
-        kutu = (min(p[0] for p in tum_nokta), min(p[1] for p in tum_nokta),
-                max(p[0] for p in tum_nokta), max(p[1] for p in tum_nokta))
-        sonuc.append({"ad": ad, "halkalar": halkalar, "kutu": kutu,
-                      "alan": sum(_halka_alani(h) for h in halkalar)})
+
+        if e.get("type") == "relation":
+            halkalar = _halkalar_olustur(e.get("members", []))
+            if not halkalar:
+                continue
+            tum_nokta = [p for h in halkalar for p in h]
+            kutu = (min(p[0] for p in tum_nokta), min(p[1] for p in tum_nokta),
+                    max(p[0] for p in tum_nokta), max(p[1] for p in tum_nokta))
+            sonuc.append({"ad": ad, "tip": "poligon", "halkalar": halkalar, "kutu": kutu,
+                          "alan": sum(_halka_alani(h) for h in halkalar)})
+        elif e.get("type") == "node" and "lat" in e and "lon" in e:
+            sonuc.append({"ad": ad, "tip": "nokta", "lat": float(e["lat"]), "lon": float(e["lon"])})
     return sonuc
 
 
@@ -1763,63 +2034,41 @@ def _overpass_indir(s, w, n, e):
     sunucular = (
         "https://overpass-api.de/api/interpreter",
         "https://overpass.kumi.systems/api/interpreter",
-        "https://overpass.osm.ch/api/interpreter",
         "https://overpass.private.coffee/api/interpreter",
     )
+    bbox = f"{s:.4f},{w:.4f},{n:.4f},{e:.4f}"
     sorgular = (
-        ("8|9", '[out:json][timeout:60];rel["boundary"="administrative"]["admin_level"~"^(8|9)$"]'
-                f'({s:.4f},{w:.4f},{n:.4f},{e:.4f});out geom;'),
-        ("8", '[out:json][timeout:60];rel["boundary"="administrative"]["admin_level"="8"]'
-              f'({s:.4f},{w:.4f},{n:.4f},{e:.4f});out geom;'),
+        ("mahalle_full", f'[out:json][timeout:25];('
+                         f'rel["boundary"="administrative"]["admin_level"="10"]({bbox});'
+                         f'node["place"~"^(suburb|neighbourhood|quarter|village)$"]({bbox});'
+                         f');out geom;'),
+        ("mahalle_node", f'[out:json][timeout:15];'
+                         f'node["place"~"^(suburb|neighbourhood|quarter|village)$"]({bbox});'
+                         f'out body;'),
     )
     hatalar = []
 
     for etiket, sorgu in sorgular:
-        for tur in range(1, 3):
-            for sunucu in sunucular:
-                try:
-                    istek = urllib.request.Request(
-                        sunucu,
-                        data=urllib.parse.urlencode({"data": sorgu}).encode(),
-                        headers={"User-Agent": "local-radar/1.0"},
-                    )
-                    with urllib.request.urlopen(istek, timeout=28) as r:
-                        kod = getattr(r, "status", "?")
-                        ham = r.read()
-                    if not ham:
-                        hatalar.append(f"{etiket} t{tur} {sunucu} -> HTTP {kod} | empty")
-                        continue
-                    try:
-                        veri = json.loads(ham.decode("utf-8"))
-                    except Exception as ex:
-                        onizleme = ham.decode("utf-8", "ignore")[:220].replace("\n", " ").strip()
-                        hatalar.append(f"{etiket} t{tur} {sunucu} -> HTTP {kod} | {type(ex).__name__}: {ex} | {onizleme or 'empty'}")
-                        continue
+        for sunucu in sunucular:
+            try:
+                istek = urllib.request.Request(
+                    sunucu,
+                    data=urllib.parse.urlencode({"data": sorgu}).encode(),
+                    headers={"User-Agent": "local-radar/1.1"},
+                )
+                with urllib.request.urlopen(istek, timeout=20) as r:
+                    ham = r.read()
+                if not ham:
+                    continue
+                veri = json.loads(ham.decode("utf-8"))
+                eleman = len(veri.get("elements", [])) if isinstance(veri, dict) else 0
+                if eleman > 0:
+                    LOG(f"   Overpass başarılı ({etiket}, {sunucu}): {eleman} mahalle verisi indi.")
+                    return veri, None
+            except Exception as ex:
+                hatalar.append(f"{sunucu} -> {type(ex).__name__}")
 
-                    eleman = len(veri.get("elements", [])) if isinstance(veri, dict) else 0
-                    if eleman > 0:
-                        LOG(f"   Overpass success ({etiket}, round {tur}, {sunucu}): {eleman} elements")
-                        return veri, None
-                    hatalar.append(f"{etiket} t{tur} {sunucu} -> HTTP {kod} | 0 elements")
-                except urllib.error.HTTPError as ex:
-                    govde = ""
-                    try:
-                        govde = ex.read().decode("utf-8", "ignore")[:220].replace("\n", " ").strip()
-                    except Exception:
-                        govde = ""
-                    ek = f" | msg={govde}" if govde else " | empty"
-                    hatalar.append(f"{etiket} t{tur} {sunucu} -> HTTP {ex.code} | {type(ex).__name__}: {ex}{ek}")
-                except urllib.error.URLError as ex:
-                    neden = getattr(ex, "reason", ex)
-                    hatalar.append(f"{etiket} t{tur} {sunucu} -> URLError | {type(neden).__name__}: {neden}")
-                except socket.timeout as ex:
-                    hatalar.append(f"{etiket} t{tur} {sunucu} -> timeout | {type(ex).__name__}: {ex}")
-                except TimeoutError as ex:
-                    hatalar.append(f"{etiket} t{tur} {sunucu} -> timeout | {type(ex).__name__}: {ex}")
-                except Exception as ex:
-                    hatalar.append(f"{etiket} t{tur} {sunucu} -> {type(ex).__name__}: {ex}")
-
-    return None, " || ".join(hatalar) if hatalar else "reason unknown"
+    return None, " | ".join(hatalar) if hatalar else "bilinmeyen hata"
 
 
 def sinirlari_hazirla(alanlar):
@@ -1877,13 +2126,25 @@ def sinirlari_hazirla(alanlar):
 def _sinirdan_mahalle(lat, lon):
     en_iyi = None
     for s in SINIRLAR:
+        if s.get("tip") != "poligon":
+            continue
         k = s["kutu"]
         if not (k[0] <= lat <= k[2] and k[1] <= lon <= k[3]):
             continue
         if any(_icinde_mi(lat, lon, h) for h in s["halkalar"]):
             if en_iyi is None or s["alan"] < en_iyi["alan"]:
                 en_iyi = s
-    return en_iyi["ad"] if en_iyi else None
+    if en_iyi:
+        return en_iyi["ad"]
+
+    en_yakin_ad, min_mesafe = None, 1.8
+    for s in SINIRLAR:
+        if s.get("tip") == "nokta":
+            d = mesafe_km((lat, lon), (s["lat"], s["lon"]))
+            if d < min_mesafe:
+                min_mesafe = d
+                en_yakin_ad = s["ad"]
+    return en_yakin_ad
 
 
 def mahalle_bul(adres, lat, lon, onbellek, aktif=True):
@@ -1891,30 +2152,27 @@ def mahalle_bul(adres, lat, lon, onbellek, aktif=True):
     if m:
         MAHALLE_ISTATISTIK["adres"] += 1
         return mahalle_yaz(m.group(1))
+
     if not aktif or lat is None:
         MAHALLE_ISTATISTIK["yok"] += 1
         return "Bilinmiyor"
+
     if SINIRLAR:
         ad = _sinirdan_mahalle(lat, lon)
         if ad:
             MAHALLE_ISTATISTIK["sinir"] += 1
             return mahalle_yaz(ad, "suburb")
-    anahtar = f"{lat:.3f},{lon:.3f}"
-    if anahtar not in onbellek:
-        time.sleep(1.1)
-        sonuc = nominatim(lat, lon)
-        onbellek[anahtar] = sonuc if sonuc else [None, None]
-        try:
-            with open(ONBELLEK_DOSYASI, "w", encoding="utf-8") as f:
-                json.dump(onbellek, f, ensure_ascii=False)
-        except Exception:
-            pass
-    ad, tur = onbellek[anahtar]
-    if not ad:
-        MAHALLE_ISTATISTIK["yok"] += 1
-        return "Bilinmiyor"
-    MAHALLE_ISTATISTIK["internet"] += 1
-    return mahalle_yaz(ad, tur)
+
+    parcalar = [p.strip() for p in (adres or "").split(",") if p.strip()]
+    if parcalar:
+        ilk = parcalar[0]
+        yasakli = ("trabzon", "yomra", "ortahisar", "türkiye", "turkey", "no:", "kat:")
+        if len(ilk) <= 35 and not any(x in ilk.lower() for x in yasakli):
+            MAHALLE_ISTATISTIK["adres"] += 1
+            return mahalle_yaz(ilk)
+
+    MAHALLE_ISTATISTIK["yok"] += 1
+    return "Bilinmiyor"
 
 
 def havuz_yukle():
@@ -1978,11 +2236,13 @@ def hepsi_yenile(ayar=None):
     xlsx_yaz(hepsi, DOSYA_HEPSI_XLSX, HAVUZ_ALANLAR)
     json_yaz(hepsi, DOSYA_HEPSI_JSON, HAVUZ_ALANLAR)
     html_yaz(hepsi, a2, DOSYA_HEPSI_HTML)
-    html_yaz(hepsi, a2, DOSYA_HEPSI_HTML_SADE, sade=True)
     kml_yaz(hepsi, DOSYA_HEPSI_KML)
     return len(hepsi)
 
 
+# ============================================================
+# calistir — Tek HTML çıktısı üretilir
+# ============================================================
 def calistir(ayar, ilerleme=lambda i, n, m: print(f"[{i}/{n}] {m}"), durdur=lambda: False,
              birlestir=True, min_puan=MIN_PUAN, min_oy=MIN_OY, mahalle_aktif=MAHALLE_BUL,
              ekranda_goster=EKRANDA_GOSTER, ham_kullan=None, devam=False):
@@ -2010,7 +2270,7 @@ def calistir(ayar, ilerleme=lambda i, n, m: print(f"[{i}/{n}] {m}"), durdur=lamb
         return None
 
     LOG("\n📡 Local Radar · Preparing results...")
-    kayitlar, puansiz = kayitlari_hazirla(tum.values(), ayar, min_puan, min_oy, mahalle_aktif)
+    kayitlar, puansiz = kayitlari_hazirla(tum.values(), ayar, min_puan, min_oy, mahalle_aktif, durdur=durdur)
     manuel_ekle(kayitlar, ayar, min_oy, ilce_filtre=True)
     kayitlar = esik_uygula(kayitlar, min_puan, min_oy, esikler=KATEGORI_ESIKLERI)
 
@@ -2029,21 +2289,21 @@ def calistir(ayar, ilerleme=lambda i, n, m: print(f"[{i}/{n}] {m}"), durdur=lamb
     xlsx_yolu = os.path.join(klasor, f"{slug}_places.xlsx")
     yemek_sadece = bool(ayar.get("yemek_sadece"))
     alisveris_acik = bool(ayar.get("alisveris_acik", True))
-    cikti_adi = ("Yemek-" if yemek_sadece else "") + slug
-    html_yolu = os.path.join(klasor, f"{cikti_adi}_guide.html")
-    html_sade_yolu = os.path.join(klasor, f"{cikti_adi}_guide_sade.html")
+    cikti_adi = slug
+    html_yolu = os.path.join(klasor, f"{cikti_adi}.html")
     kml_yolu = os.path.join(klasor, f"{slug}_places.kml")
+    json_yolu = os.path.join(klasor, f"{slug}_places.json")
+
     csv_yaz(kayitlar, csv_yolu, HAVUZ_ALANLAR)
     xlsx_yaz(kayitlar, xlsx_yolu, HAVUZ_ALANLAR)
-    json_yolu = os.path.join(klasor, f"{slug}_places.json")
-    html_yaz(kayitlar, ayar, html_yolu, yemek_sadece=yemek_sadece, alisveris_acik=alisveris_acik)
-    html_yaz(kayitlar, ayar, html_sade_yolu, sade=True, yemek_sadece=yemek_sadece, alisveris_acik=alisveris_acik)
     json_yaz(kayitlar, json_yolu, HAVUZ_ALANLAR)
+    html_yaz(kayitlar, ayar, html_yolu, yemek_sadece=yemek_sadece, alisveris_acik=alisveris_acik)
     kml_yaz(kayitlar, kml_yolu)
 
     ozet = {"csv": os.path.abspath(csv_yolu), "xlsx": os.path.abspath(xlsx_yolu),
             "json": os.path.abspath(json_yolu), "html": os.path.abspath(html_yolu),
-            "html_sade": os.path.abspath(html_sade_yolu), "kml": os.path.abspath(kml_yolu),
+            "html_sade": os.path.abspath(html_yolu),  # Sade butonuna basılırsa da bu tek dosyayı açar
+            "kml": os.path.abspath(kml_yolu),
             "ham": os.path.abspath(ham_yolu), "klasor": os.path.abspath(klasor),
             "okunan": len(tum), "puansiz": puansiz, "adet": len(kayitlar),
             "yeni": yeni, "guncellenen": guncellenen, "kayip": kayip}
@@ -2058,13 +2318,12 @@ def calistir(ayar, ilerleme=lambda i, n, m: print(f"[{i}/{n}] {m}"), durdur=lamb
         xlsx_yaz(hepsi, DOSYA_HEPSI_XLSX, HAVUZ_ALANLAR)
         json_yaz(hepsi, DOSYA_HEPSI_JSON, HAVUZ_ALANLAR)
         html_yaz(hepsi, a2, DOSYA_HEPSI_HTML)
-        html_yaz(hepsi, a2, DOSYA_HEPSI_HTML_SADE, sade=True)
         kml_yaz(hepsi, DOSYA_HEPSI_KML)
         ozet.update(hepsi_csv=os.path.abspath(DOSYA_HEPSI_CSV),
                     hepsi_xlsx=os.path.abspath(DOSYA_HEPSI_XLSX),
                     hepsi_json=os.path.abspath(DOSYA_HEPSI_JSON),
                     hepsi_html=os.path.abspath(DOSYA_HEPSI_HTML),
-                    hepsi_html_sade=os.path.abspath(DOSYA_HEPSI_HTML_SADE),
+                    hepsi_html_sade=os.path.abspath(DOSYA_HEPSI_HTML),
                     hepsi_kml=os.path.abspath(DOSYA_HEPSI_KML), toplam=len(hepsi))
 
     return ozet
@@ -2080,714 +2339,6 @@ def main():
     print(f"   New: {ozet['yeni']}  |  Updated: {ozet['guncellenen']}  |  No longer visible: {ozet.get('kayip', 0)}")
     print(f"   Scan folder : {ozet['klasor']}")
     print(f"   Combined guide ({ozet['toplam']} places): {ozet['hepsi_html']}")
-
-
-SABLON = r"""<!DOCTYPE html>
-<html lang="tr"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>__BASLIK__</title>
-<style>__LEAFLET_CSS__</style>
-<style>
-:root{--bg:#f8f9fa;--card:#fff;--ink:#202124;--mut:#5f6368;--line:#dadce0;--primary:#1a73e8;--primarybg:#e8f0fe;--gold:#f29900;--yesil:#0b8043}
-@media (prefers-color-scheme:dark){:root{--bg:#202124;--card:#2d2e31;--ink:#e8eaed;--mut:#9aa0a6;--line:#3c4043;--primary:#8ab4f8;--primarybg:#303134;--gold:#fbbc04;--yesil:#81c995}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.4;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-.wrap{max-width:640px;margin:0 auto;padding:20px 16px 48px}
-h1{font-size:28px;font-weight:800;margin:8px 0 4px;letter-spacing:-.02em}
-.sub{color:var(--mut);font-size:14px;margin:0 0 12px}
-.tabs{display:flex;gap:8px;flex-wrap:wrap;position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:500}
-.tabs button{flex:0 0 auto;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-weight:600;padding:9px 16px;border-radius:99px;cursor:pointer}
-.tabs button[aria-selected="true"]{background:var(--primary);border-color:var(--primary);color:#fff}
-.chips{display:flex;gap:6px;flex-wrap:wrap;padding:2px 0 10px}
-.chips button{flex:0 0 auto;border:1px solid var(--line);background:transparent;color:var(--mut);font:inherit;font-size:13px;padding:5px 12px;border-radius:99px;cursor:pointer}
-.chips button[aria-pressed="true"]{background:var(--primarybg);border-color:var(--primary);color:var(--primary);font-weight:600}
-@media (prefers-color-scheme:dark){.tabs button[aria-selected="true"]{color:#202124}}
-input,select{width:100%;font:inherit;padding:11px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);margin:6px 0 4px}
-input:focus,select:focus{outline:2px solid var(--primary);border-color:transparent}
-.f-row{display:flex;gap:12px;margin:8px 0 4px}
-.f-row div{flex:1}
-.f-row label{display:block;font-size:12px;color:var(--mut);margin:0 0 4px 4px;font-weight:600}
-h2{font-size:16px;margin:22px 0 8px;font-weight:700;color:var(--primary);border-bottom:1px solid var(--line);padding-bottom:4px}
-.row{display:flex;gap:12px;align-items:flex-start;background:var(--card);border-bottom:1px solid var(--line);padding:12px}
-.row:first-of-type{border-radius:14px 14px 0 0}.row:last-child{border-radius:0 0 14px 14px;border-bottom:0}.row:only-child{border-radius:14px}
-.pt{flex:0 0 46px;text-align:center;background:var(--primarybg);border-radius:10px;padding:6px 0}
-.pt b{display:block;font-size:18px;color:var(--primary)}.pt small{font-size:11px;color:var(--mut)}
-.body{flex:1;min-width:0}
-.nm{font-weight:600;font-size:16px;overflow-wrap:anywhere}
-.meta{font-size:13px;color:var(--mut);margin-top:2px;overflow-wrap:anywhere}
-.mah{font-size:13px;color:var(--primary);font-weight:600;margin-top:2px}
-.fy{color:var(--gold);font-weight:600}
-a.go{display:inline-block;margin-top:8px;font-size:13px;font-weight:600;color:var(--primary);text-decoration:none;border:1px solid var(--line);padding:5px 12px;border-radius:99px}
-.ikon{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:99px;padding:5px 10px;font:inherit;font-size:13px;margin-left:6px;cursor:pointer}
-.ikon:hover{background:var(--primarybg)}
-.foot{color:var(--mut);font-size:12px;margin-top:28px}
-.none{color:var(--mut);padding:24px 0}
-#map{display:none;height:68vh;border-radius:14px;border:1px solid var(--line);margin-top:8px}
-.leaflet-popup-content{font-family:inherit;font-size:14px}
-
-.gun-btn{border:1px solid var(--line);background:transparent;color:var(--mut);border-radius:99px;padding:3px 8px;font-size:11px;margin-left:3px;cursor:pointer;font-weight:600}
-.gun-btn:hover{background:var(--primarybg)}
-.gun-btn[data-secili="true"]{background:var(--primary);color:#fff;border-color:var(--primary)}
-.gun-filtre{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 12px 0}
-.gun-filtre button{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 14px;border-radius:99px;font-size:13px;cursor:pointer;font-weight:600}
-.gun-filtre button[aria-pressed="true"]{background:var(--primary);color:#fff;border-color:var(--primary)}
-
-.butce-panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:12px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:14px}
-.butce-panel .item{display:flex;flex-direction:column;gap:2px}
-.butce-panel .etiket{font-size:11px;color:var(--mut);text-transform:uppercase;font-weight:600;letter-spacing:.03em}
-.butce-panel .deger{font-size:18px;font-weight:700;color:var(--primary)}
-.butce-panel .deger.yesil{color:var(--yesil)}
-.butce-panel input[type="number"]{width:100%;padding:5px 8px;font-size:14px;margin:0;border-radius:8px}
-.fiyat-input{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:6px;padding:3px 6px;font-size:12px;width:72px;margin-left:4px}
-.fiyat-input:focus{outline:2px solid var(--primary);border-color:transparent}
-.fiyat-input::placeholder{color:var(--mut);opacity:.6}
-
-@media (max-width:680px){
-  .wrap{padding:14px 10px 24px}
-  h1{font-size:24px}
-  .f-row{flex-direction:column;gap:8px}
-  .f-row > div{width:100%}
-  .tabs button{padding:8px 12px;font-size:14px}
-  .chips button{font-size:12px}
-  .row{padding:10px}
-  #map{height:50vh}
-  .butce-panel{padding:10px;gap:10px}
-  .butce-panel .deger{font-size:16px}
-  .fiyat-input{width:60px}
-}
-</style>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-</head><body><div class="wrap">
-
-<h1>📡 __BASLIK__</h1>
-<p class="sub" style="margin-bottom: 4px;">__ALT__</p>
-<div style="font-size: 13px; font-weight: 600; color: var(--primary); margin-bottom: 16px;">📅 __TARIH__</div>
-
-<div class="f-row" style="margin-bottom: 8px;">
-  <button class="ikon" style="margin-left:0" onclick="rotaAc()">Rotada Aç</button>
-  <button class="ikon" onclick="wpListe()">WP'ye Gönder</button>
-  <button class="ikon" onclick="konumAl(draw)">📍 Konum Bul</button>
-  <button class="ikon" onclick="tumVerileriTemizle()" style="color:#c00">🗑️ Sıfırla</button>
-</div>
-
-<select id="ic" aria-label="İlçe"></select>
-<div style="margin-bottom: 4px;">
-<input id="mq" type="search" placeholder="📍 Hızlı Mahalle Ara (Örn: Çarşı, Karataş)">
-</div>
-<select id="mh" aria-label="Mahalle"></select>
-<div class="f-row">
-  <div><label for="mp">En az puan</label><input id="mp" type="number" step="0.1" placeholder="örn. 4.5"></div>
-  <div><label for="my">En az yorum</label><input id="my" type="number" step="10" placeholder="örn. 200"></div>
-</div>
-<input id="q" type="search" placeholder="Listede kelime ara (örn. pide, kebap)">
-<div class="f-row">
-  <select id="sirala" aria-label="Sıralama" style="flex:2">
-    <option value="skor">Sıralama: Güvenilir skor</option>
-    <option value="puan">Sıralama: Puan (yüksekten)</option>
-    <option value="yorum">Sıralama: Yorum sayısı (çoktan)</option>
-    <option value="yakin">Sıralama: Bana yakın</option>
-  </select>
-  <select id="gs" style="flex:1">
-    <option value="">Hepsi</option>
-    <option value="fav">Favoriler</option>
-    <option value="gitmedi">Gitmediklerim</option>
-    <option value="gunlu">Gün Atanmış</option>
-  </select>
-</div>
-
-<div class="butce-panel" id="butcePanel">
-  <div class="item">
-    <span class="etiket">Toplam</span>
-    <span class="deger" id="butceToplam">0 ₺</span>
-  </div>
-  <div class="item">
-    <span class="etiket">Kişi Sayısı</span>
-    <input type="number" id="kisiSayisi" min="1" value="1" step="1">
-  </div>
-  <div class="item">
-    <span class="etiket">Kişi Başı</span>
-    <span class="deger yesil" id="butceKisiBasi">0 ₺</span>
-  </div>
-  <div class="item">
-    <span class="etiket">Gün 1</span>
-    <span class="deger" id="butceGun1">0 ₺</span>
-  </div>
-  <div class="item">
-    <span class="etiket">Gün 2</span>
-    <span class="deger" id="butceGun2">0 ₺</span>
-  </div>
-  <div class="item">
-    <span class="etiket">Gün 3</span>
-    <span class="deger" id="butceGun3">0 ₺</span>
-  </div>
-</div>
-
-<div class="tabs" id="tabs" role="tablist"></div>
-
-<div class="gun-filtre" id="gunFiltre"></div>
-
-<div class="chips" id="chips"></div>
-<div id="map"></div>
-<div id="list"></div>
-<p class="foot"><b>📡 Local Radar</b> · Data source: Google Maps. Ratings reflect the day the guide was created. Verify opening hours before visiting. Map: © OpenStreetMap contributors.</p>
-</div>
-<script>
-const V=__DATA__,O=V.O,I=V.I,ANA=Object.keys(O);let ana='',alt='',map=null,katman=null;
-const HARITA='__MAP__';
-const RENK={'Yemek':'#e8710a','Gezilecek yerler':'#1a73e8','Alışveriş':'#0b8043','Diğer':'#5f6368'};
-const $=id=>document.getElementById(id);
-const tabs=$('tabs'),chips=$('chips'),list=$('list'),q=$('q'),mh=$('mh'),mq=$('mq'),ic=$('ic'),mp=$('mp'),my=$('my'),sirala=$('sirala'),gs=$('gs'),mapEl=$('map');
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const tl=s=>String(s).toLocaleLowerCase('tr');
-
-function durumOku(){try{return JSON.parse(localStorage.getItem('gezi_durum')||'{}')}catch(e){return {}}}
-function durumYaz(){try{localStorage.setItem('gezi_durum',JSON.stringify(durum))}catch(e){}}
-let durum=durumOku();
-let konum=null;
-
-const GUNLER=[1,2,3,4,5];
-let aktifGun='';
-function gunDurumOku(){try{return JSON.parse(localStorage.getItem('gezi_gun_durum')||'{}')}catch(e){return {}}}
-function gunDurumYaz(){try{localStorage.setItem('gezi_gun_durum',JSON.stringify(gunDurum))}catch(e){}}
-let gunDurum=gunDurumOku();
-
-function fiyatDurumOku(){try{return JSON.parse(localStorage.getItem('gezi_fiyat_durum')||'{}')}catch(e){return {}}}
-function fiyatDurumYaz(){
-  try{
-    localStorage.setItem('gezi_fiyat_durum',JSON.stringify(fiyatDurum));
-    localStorage.setItem('gezi_kisi_sayisi',document.getElementById('kisiSayisi').value);
-  }catch(e){}
-}
-let fiyatDurum=fiyatDurumOku();
-
-function km(a,b,c,d){const t=x=>x*Math.PI/180,R=6371,dl=t(c-a),dg=t(d-b);
-  const h=Math.sin(dl/2)**2+Math.cos(t(a))*Math.cos(t(c))*Math.sin(dg/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
-function uzak(x){return(konum&&x.e!=null)?km(konum.lat,konum.lon,x.e,x.b):null}
-
-function konumAl(sonra){
-  if(!navigator.geolocation){alert('Bu tarayıcı konum vermiyor');return;}
-  navigator.geolocation.getCurrentPosition(
-    p=>{konum={lat:p.coords.latitude,lon:p.coords.longitude};if(sonra)sonra();},
-    ()=>alert('Konum alınamadı. Tarayıcıda konum iznini aç.'),
-    {enableHighAccuracy:true,timeout:10000});
-}
-
-const ilceler=[...new Set(I.map(x=>x.c).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'tr'));
-if(ilceler.length>=2)ic.innerHTML='<option value="">Tüm ilçeler</option>'+ilceler.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
-else ic.style.display='none';
-
-const mahSayisi=new Set(I.filter(x=>x.m!=='Bilinmiyor').map(x=>x.c+'|'+x.m)).size;
-if(mahSayisi<2){mh.style.display='none';mq.style.display='none'}
-
-function mahalleListe(){
-  if(mahSayisi<2)return;
-  const c=ic.value,t=tl(mq.value.trim()),say={};
-  I.forEach(x=>{if((c&&x.c!==c)||x.m==='Bilinmiyor')return;const k=x.c+'|'+x.m;say[k]=(say[k]||0)+1});
-  const ks=Object.keys(say).filter(k=>tl(k.split('|')[1]).includes(t)).sort((a,b)=>a.split('|')[1].localeCompare(b.split('|')[1],'tr'));
-  const onceki=mh.value;
-  mh.innerHTML='<option value="">Tüm mahalleler</option>'+ks.map(k=>{const p=k.split('|');
-    return `<option value="${esc(k)}">${esc(p[1])}${(!c&&p[0])?' · '+esc(p[0]):''} (${say[k]})</option>`}).join('');
-  if(ks.includes(onceki))mh.value=onceki;
-}
-
-function ok(x){
-  const t=tl(q.value.trim()),p0=parseFloat(mp.value)||0,y0=parseInt(my.value,10)||0;
-  const gunKosul=(aktifGun==='')||(gunDurum[x.l]==aktifGun);
-  return (!ic.value||x.c===ic.value)&&(!mh.value||(x.c+'|'+x.m)===mh.value)&&
-    (!t||tl(x.n+' '+x.t).includes(t))&&(p0===0&&y0===0&&x.u ? true : (parseFloat(x.p.replace(',','.'))>=p0&&(x.y||0)>=y0))&&
-    (gs.value===''||(gs.value==='fav'&&(durum[x.l]||{}).fav)||(gs.value==='gitmedi'&&!(durum[x.l]||{}).gitti)||(gs.value==='gunlu'&&gunDurum[x.l]))&&
-    gunKosul;
-}
-
-function kiyas(a,b){
-  const s=sirala.value;
-  if(s==='puan')return parseFloat(b.p.replace(',','.'))-parseFloat(a.p.replace(',','.'));
-  if(s==='yorum')return b.y-a.y;
-  if(s==='yakin'){ if(!konum){konumAl(draw);return 0;} return (uzak(a)??1e9)-(uzak(b)??1e9); }
-  return b.s-a.s;
-}
-
-function haritaCiz(){
-  list.style.display='none';mapEl.style.display='block';
-  if(!map){
-    map=L.map('map');
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap katkıcıları'}).addTo(map);
-  }
-  setTimeout(()=>map.invalidateSize(),60);
-  if(katman)map.removeLayer(katman);
-  const pts=I.filter(x=>ok(x)&&typeof x.e==='number'&&typeof x.b==='number');
-  const isaretler=pts.map(x=>L.circleMarker([x.e,x.b],{radius:7,weight:2,color:'#fff',fillColor:RENK[x.A]||'#5f6368',fillOpacity:.9})
-    .bindPopup('<b>'+esc(x.n)+'</b><br>⭐ '+esc(x.p)+' · '+x.y+' yorum<br>'+esc(x.m!=='Bilinmiyor'?x.m:'')+
-      '<br><a href="'+esc(x.l)+'" target="_blank" rel="noopener">Google Haritalar\u2019da aç</a>'));
-  katman=L.featureGroup(isaretler).addTo(map);
-  if(pts.length)map.fitBounds(katman.getBounds().pad(0.15));
-  else map.setView([38.96,35.24],6);
-}
-
-function gunButonlariHTML(l){
-  const seciliGun=gunDurum[l]||null;
-  let html='';
-  GUNLER.forEach(g=>{
-    html+=`<button class="gun-btn" data-l="${esc(l)}" data-gun="${g}" data-secili="${seciliGun===g}">G${g}</button>`;
-  });
-  return html;
-}
-
-function gunFiltreOlustur(){
-  const kap=document.getElementById('gunFiltre');
-  if(!kap)return;
-  let html=`<button data-gun="" aria-pressed="${aktifGun===''}">Tümü</button>`;
-  GUNLER.forEach(g=>{
-    html+=`<button data-gun="${g}" aria-pressed="${aktifGun===String(g)}">Gün ${g}</button>`;
-  });
-  kap.innerHTML=html;
-}
-
-function satir(x){
-  const meta=[esc(x.t),x.f?'<span class="fy">'+esc(x.f)+'</span>':'',esc(x.a)].filter(Boolean).join(' · ');
-  const dist=uzak(x)!=null?'<div class="mah">'+uzak(x).toFixed(1).replace('.',',')+' km</div>':'';
-  const fDurum=durum[x.l]||{};
-  const nBtn=fDurum.not?'<div class="meta">📝 '+esc(fDurum.not)+'</div>':'';
-  const puanKutusu=x.u?'<b style="font-size:13px">puansız</b><small>—</small>':`<b>${x.p}</b><small>${x.y}</small>`;
-  const fiyatDeger=fiyatDurum[x.l]||'';
-  return `<div class="row"><div class="pt">${puanKutusu}</div><div class="body"><div class="nm">${esc(x.n)}</div>`+
-    (meta?`<div class="meta">${meta}</div>`:'')+(x.m!=='Bilinmiyor'?`<div class="mah">${esc(x.m)}${(ilceler.length>=2&&x.c)?' · '+esc(x.c):''}</div>`:'')+dist+
-    `<div style="margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
-      <a class="go" href="${esc(x.l)}" target="_blank" rel="noopener">Haritada aç</a>
-      <button class="ikon" data-t="fav" data-l="${esc(x.l)}">${fDurum.fav?'★':'☆'}</button>
-      <button class="ikon" data-t="gitti" data-l="${esc(x.l)}">${fDurum.gitti?'✓ Gittik':'Gittik mi?'}</button>
-      <button class="ikon" data-t="not" data-l="${esc(x.l)}">📝</button>
-      <span style="font-size:11px;color:var(--mut);margin-left:6px;">Gün:</span>
-      ${gunButonlariHTML(x.l)}
-      <input type="number" class="fiyat-input" placeholder="₺" value="${fiyatDeger}" data-fiyat-l="${esc(x.l)}" min="0" step="10" title="Tahmini harcama (₺)">
-    </div>${nBtn}</div></div>`;
-}
-
-function rotaAc(){
-  const d=I.filter(x=>(durum[x.l]||{}).fav&&x.e!=null);
-  if(!d.length){alert('Önce yerleri ★ ile işaretle (ve konumları belli olmalı)');return;}
-  const son=d[d.length-1], ara=d.slice(0,-1).map(x=>x.e+','+x.b).join('|');
-  let url='https://www.google.com/maps/dir/?api=1&destination='+son.e+','+son.b+'&travelmode=driving';
-  if(ara) url+='&waypoints='+encodeURIComponent(ara);
-  window.open(url,'_blank');
-}
-
-function wpListe(){
-  const l=I.filter(ok).slice(0,10).filter(x=>x.e!=null);
-  if(!l.length){alert('Listede konumlu yer yok');return;}
-  const t=l.map((x,i)=>`${i+1}. ${x.n} (${x.p}★, ${x.y} yorum)${x.m!=='Bilinmiyor'?' - '+x.m:''}\nhttps://maps.google.com/?q=${x.e},${x.b}`).join('\n\n');
-  window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank');
-}
-
-function tumVerileriTemizle(){
-  if(!confirm('Tüm favoriler, günler, fiyatlar ve notlar silinecek. Emin misin?'))return;
-  localStorage.removeItem('gezi_durum');
-  localStorage.removeItem('gezi_gun_durum');
-  localStorage.removeItem('gezi_fiyat_durum');
-  localStorage.removeItem('gezi_kisi_sayisi');
-  durum={};gunDurum={};fiyatDurum={};
-  document.getElementById('kisiSayisi').value=1;
-  draw();
-  butceGuncelle();
-}
-
-function tlFormat(sayi){
-  if(!sayi||isNaN(sayi))return '0 ₺';
-  return Math.round(sayi).toLocaleString('tr-TR')+' ₺';
-}
-
-function butceGuncelle(){
-  let toplam=0;
-  const gunToplamlari={1:0,2:0,3:0,4:0,5:0};
-  Object.keys(fiyatDurum).forEach(l=>{
-    const fiyat=parseFloat(fiyatDurum[l])||0;
-    if(fiyat>0){
-      toplam+=fiyat;
-      const gun=gunDurum[l];
-      if(gun&&gunToplamlari[gun]!==undefined)gunToplamlari[gun]+=fiyat;
-    }
-  });
-  const kisiSayisi=parseInt(document.getElementById('kisiSayisi').value)||1;
-  const kisiBasi=kisiSayisi>0?toplam/kisiSayisi:toplam;
-  document.getElementById('butceToplam').textContent=tlFormat(toplam);
-  document.getElementById('butceKisiBasi').textContent=tlFormat(kisiBasi);
-  document.getElementById('butceGun1').textContent=tlFormat(gunToplamlari[1]);
-  document.getElementById('butceGun2').textContent=tlFormat(gunToplamlari[2]);
-  document.getElementById('butceGun3').textContent=tlFormat(gunToplamlari[3]);
-}
-
-document.getElementById('gunFiltre').addEventListener('click',e=>{
-  const b=e.target.closest('button');
-  if(!b)return;
-  aktifGun=b.dataset.gun||'';
-  gunFiltreOlustur();
-  draw();
-});
-
-list.addEventListener('click',e=>{
-  const gunBtn=e.target.closest('.gun-btn');
-  if(gunBtn){
-    const l=gunBtn.dataset.l;
-    const g=parseInt(gunBtn.dataset.gun);
-    if(gunDurum[l]===g){delete gunDurum[l];}
-    else{gunDurum[l]=g;}
-    gunDurumYaz();
-    butceGuncelle();
-    draw();
-    return;
-  }
-  const b=e.target.closest('.ikon'); if(!b) return;
-  const l=b.dataset.l; if(!l) return;
-  durum[l]=durum[l]||{};
-  if(b.dataset.t==='fav') durum[l].fav=!durum[l].fav;
-  else if(b.dataset.t==='gitti') durum[l].gitti=!durum[l].gitti;
-  else if(b.dataset.t==='not'){ const n=prompt('Not:',durum[l].not||''); if(n!==null) durum[l].not=n; }
-  durumYaz(); draw();
-});
-
-document.addEventListener('input',e=>{
-  const inp=e.target.closest('.fiyat-input');
-  if(!inp)return;
-  const l=inp.dataset.fiyatL;
-  const deger=inp.value.trim();
-  if(deger===''){delete fiyatDurum[l];}
-  else{fiyatDurum[l]=parseFloat(deger)||0;}
-  fiyatDurumYaz();
-  butceGuncelle();
-});
-
-document.getElementById('kisiSayisi').addEventListener('input',()=>{
-  fiyatDurumYaz();
-  butceGuncelle();
-});
-
-function draw(){
-  if(ana===HARITA){haritaCiz();}
-  else{mapEl.style.display='none';list.style.display='';}
-  const f=I.filter(ok),arama=q.value.trim()!=='';
-  const cnt={};f.forEach(x=>{cnt[x.A]=(cnt[x.A]||0)+1});
-  tabs.innerHTML=`<button role="tab" aria-selected="${ana===''}" data-a="">Tümü (${f.length})</button>`+
-    ANA.map(a=>`<button role="tab" aria-selected="${ana===a}" data-a="${esc(a)}">${esc(a)} (${cnt[a]||0})</button>`).join('')+
-    `<button role="tab" aria-selected="${ana===HARITA}" data-a="${HARITA}">🗺️ Harita</button>`;
-
-  if(ana&&ana!==HARITA){
-    const c2={};f.filter(x=>x.A===ana).forEach(x=>{c2[x.S]=(c2[x.S]||0)+1});
-    chips.innerHTML=`<button aria-pressed="${alt===''}" data-s="">Hepsi</button>`+
-      O[ana].filter(s=>c2[s]).map(s=>`<button aria-pressed="${alt===s}" data-s="${esc(s)}">${esc(s)} (${c2[s]})</button>`).join('');
-    chips.style.display='';
-  }else chips.style.display='none';
-
-  if(ana===HARITA)return;
-
-  const sec=f.filter(x=>arama||!ana||(x.A===ana&&(!alt||x.S===alt)));
-  const tumu=arama||!ana;let out='';
-
-  ANA.forEach(a=>O[a].forEach(s=>{
-    const it=sec.filter(x=>x.A===a&&x.S===s);if(!it.length)return;
-    it.sort(kiyas);
-    const bas=tumu?a+' · '+s:(alt?'':s);
-    out+=(bas?`<h2>${esc(bas)}</h2>`:'')+'<div>'+it.map(satir).join('')+'</div>';
-  }));
-  list.innerHTML=out||'<p class="none">Sonuç yok. Süzgeçleri gevşetmeyi dene.</p>';
-}
-
-tabs.onclick=e=>{const b=e.target.closest('button');if(b){ana=b.dataset.a;alt='';draw();scrollTo(0,0)}};
-chips.onclick=e=>{const b=e.target.closest('button');if(b){alt=b.dataset.s;draw()}};
-ic.onchange=()=>{mahalleListe();draw()};
-mq.oninput=()=>{mahalleListe();draw()};
-mh.onchange=draw;
-mp.oninput=draw;
-my.oninput=draw;
-q.oninput=draw;
-gs.onchange=draw;
-sirala.onchange=draw;
-
-try{
-  const kisi=localStorage.getItem('gezi_kisi_sayisi');
-  if(kisi)document.getElementById('kisiSayisi').value=kisi;
-}catch(e){}
-
-mahalleListe();
-gunFiltreOlustur();
-draw();
-butceGuncelle();
-</script></body></html>
-"""
-
-
-SABLON_SADE = r"""<!DOCTYPE html>
-<html lang="tr"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>__BASLIK__</title>
-<style>__LEAFLET_CSS__</style>
-<style>
-:root{--bg:#f8f9fa;--card:#fff;--ink:#202124;--mut:#5f6368;--line:#dadce0;--primary:#1a73e8;--primarybg:#e8f0fe;--gold:#f29900;--yesil:#0b8043}
-@media (prefers-color-scheme:dark){:root{--bg:#202124;--card:#2d2e31;--ink:#e8eaed;--mut:#9aa0a6;--line:#3c4043;--primary:#8ab4f8;--primarybg:#303134;--gold:#fbbc04;--yesil:#81c995}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.4;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-.wrap{max-width:640px;margin:0 auto;padding:20px 16px 48px}
-h1{font-size:28px;font-weight:800;margin:8px 0 4px;letter-spacing:-.02em}
-.sub{color:var(--mut);font-size:14px;margin:0 0 12px}
-.tabs{display:flex;gap:8px;flex-wrap:wrap;position:sticky;top:0;background:var(--bg);padding:10px 0;z-index:500}
-.tabs button{flex:0 0 auto;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-weight:600;padding:9px 16px;border-radius:99px;cursor:pointer}
-.tabs button[aria-selected="true"]{background:var(--primary);border-color:var(--primary);color:#fff}
-.chips{display:flex;gap:6px;flex-wrap:wrap;padding:2px 0 10px}
-.chips button{flex:0 0 auto;border:1px solid var(--line);background:transparent;color:var(--mut);font:inherit;font-size:13px;padding:5px 12px;border-radius:99px;cursor:pointer}
-.chips button[aria-pressed="true"]{background:var(--primarybg);border-color:var(--primary);color:var(--primary);font-weight:600}
-@media (prefers-color-scheme:dark){.tabs button[aria-selected="true"]{color:#202124}}
-input,select{width:100%;font:inherit;padding:11px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);margin:6px 0 4px}
-input:focus,select:focus{outline:2px solid var(--primary);border-color:transparent}
-.f-row{display:flex;gap:12px;margin:8px 0 4px}
-.f-row div{flex:1}
-.f-row label{display:block;font-size:12px;color:var(--mut);margin:0 0 4px 4px;font-weight:600}
-h2{font-size:16px;margin:22px 0 8px;font-weight:700;color:var(--primary);border-bottom:1px solid var(--line);padding-bottom:4px}
-.row{display:flex;gap:12px;align-items:flex-start;background:var(--card);border-bottom:1px solid var(--line);padding:12px}
-.row:first-of-type{border-radius:14px 14px 0 0}.row:last-child{border-radius:0 0 14px 14px;border-bottom:0}.row:only-child{border-radius:14px}
-.pt{flex:0 0 46px;text-align:center;background:var(--primarybg);border-radius:10px;padding:6px 0}
-.pt b{display:block;font-size:18px;color:var(--primary)}.pt small{font-size:11px;color:var(--mut)}
-.body{flex:1;min-width:0}
-.nm{font-weight:600;font-size:16px;overflow-wrap:anywhere}
-.meta{font-size:13px;color:var(--mut);margin-top:2px;overflow-wrap:anywhere}
-.mah{font-size:13px;color:var(--primary);font-weight:600;margin-top:2px}
-.fy{color:var(--gold);font-weight:600}
-a.go{display:inline-block;margin-top:8px;font-size:13px;font-weight:600;color:var(--primary);text-decoration:none;border:1px solid var(--line);padding:5px 12px;border-radius:99px}
-.ikon{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:99px;padding:5px 10px;font:inherit;font-size:13px;margin-left:6px;cursor:pointer}
-.ikon:hover{background:var(--primarybg)}
-.foot{color:var(--mut);font-size:12px;margin-top:28px}
-.none{color:var(--mut);padding:24px 0}
-#map{display:none;height:68vh;border-radius:14px;border:1px solid var(--line);margin-top:8px}
-.leaflet-popup-content{font-family:inherit;font-size:14px}
-@media (max-width:680px){
-  .wrap{padding:14px 10px 24px}
-  h1{font-size:24px}
-  .f-row{flex-direction:column;gap:8px}
-  .f-row > div{width:100%}
-  .tabs button{padding:8px 12px;font-size:14px}
-  .chips button{font-size:12px}
-  .row{padding:10px}
-  #map{height:50vh}
-}
-</style>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-</head><body><div class="wrap">
-
-<h1>📡 __BASLIK__</h1>
-<p class="sub" style="margin-bottom: 4px;">__ALT__</p>
-<div style="font-size: 13px; font-weight: 600; color: var(--primary); margin-bottom: 16px;">📅 __TARIH__ · Sade görünüm</div>
-
-<div class="f-row" style="margin-bottom: 8px;">
-  <button class="ikon" style="margin-left:0;color:#c00" onclick="favorileriTemizle()">🗑️ Sıfırla</button>
-</div>
-
-<select id="ic" aria-label="İlçe"></select>
-<div style="margin-bottom: 4px;">
-<input id="mq" type="search" placeholder="📍 Hızlı Mahalle Ara (Örn: Çarşı, Karataş)">
-</div>
-<select id="mh" aria-label="Mahalle"></select>
-<div class="f-row">
-  <div><label for="mp">En az puan</label><input id="mp" type="number" step="0.1" placeholder="örn. 4.5"></div>
-  <div><label for="my">En az yorum</label><input id="my" type="number" step="10" placeholder="örn. 200"></div>
-</div>
-<input id="q" type="search" placeholder="Listede kelime ara (örn. pide, kebap)">
-<div class="f-row">
-  <select id="sirala" aria-label="Sıralama" style="flex:2">
-    <option value="skor">Sıralama: Güvenilir skor</option>
-    <option value="puan">Sıralama: Puan (yüksekten)</option>
-    <option value="yorum">Sıralama: Yorum sayısı (çoktan)</option>
-    <option value="yakin">Sıralama: Bana yakın</option>
-  </select>
-  <select id="gs" style="flex:1">
-    <option value="">Hepsi</option>
-    <option value="fav">Favoriler</option>
-  </select>
-</div>
-
-<div class="tabs" id="tabs" role="tablist"></div>
-
-<div class="chips" id="chips"></div>
-<div id="map"></div>
-<div id="list"></div>
-<p class="foot"><b>📡 Local Radar</b> · Data source: Google Maps. Ratings reflect the day the guide was created. Verify opening hours before visiting. Map: © OpenStreetMap contributors.</p>
-</div>
-<script>
-const V=__DATA__;
-const O=V.O,I=V.I,ANA=Object.keys(O);let ana='',alt='',map=null,katman=null;
-const HARITA='__MAP__';
-const RENK={'Yemek':'#e8710a','Gezilecek yerler':'#1a73e8','Alışveriş':'#0b8043','Diğer':'#5f6368'};
-const $=id=>document.getElementById(id);
-const tabs=$('tabs'),chips=$('chips'),list=$('list'),q=$('q'),mh=$('mh'),mq=$('mq'),ic=$('ic'),mp=$('mp'),my=$('my'),sirala=$('sirala'),gs=$('gs'),mapEl=$('map');
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const tl=s=>String(s).toLocaleLowerCase('tr');
-
-function durumOku(){try{return JSON.parse(localStorage.getItem('gezi_durum')||'{}')}catch(e){return {}}}
-function durumYaz(){try{localStorage.setItem('gezi_durum',JSON.stringify(durum))}catch(e){}}
-let durum=durumOku();
-let konum=null;
-
-function km(a,b,c,d){const t=x=>x*Math.PI/180,R=6371,dl=t(c-a),dg=t(d-b);
-  const h=Math.sin(dl/2)**2+Math.cos(t(a))*Math.cos(t(c))*Math.sin(dg/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
-function uzak(x){return(konum&&x.e!=null)?km(konum.lat,konum.lon,x.e,x.b):null}
-
-function konumAl(sonra){
-  if(!navigator.geolocation){alert('Bu tarayıcı konum vermiyor');return;}
-  navigator.geolocation.getCurrentPosition(
-    p=>{konum={lat:p.coords.latitude,lon:p.coords.longitude};if(sonra)sonra();},
-    ()=>alert('Konum alınamadı. Tarayıcıda konum iznini aç.'),
-    {enableHighAccuracy:true,timeout:10000});
-}
-
-const ilceler=[...new Set(I.map(x=>x.c).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'tr'));
-if(ilceler.length>=2)ic.innerHTML='<option value="">Tüm ilçeler</option>'+ilceler.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
-else ic.style.display='none';
-
-const mahSayisi=new Set(I.filter(x=>x.m!=='Bilinmiyor').map(x=>x.c+'|'+x.m)).size;
-if(mahSayisi<2){mh.style.display='none';mq.style.display='none'}
-
-function mahalleListe(){
-  if(mahSayisi<2)return;
-  const c=ic.value,t=tl(mq.value.trim()),say={};
-  I.forEach(x=>{if((c&&x.c!==c)||x.m==='Bilinmiyor')return;const k=x.c+'|'+x.m;say[k]=(say[k]||0)+1});
-  const ks=Object.keys(say).filter(k=>tl(k.split('|')[1]).includes(t)).sort((a,b)=>a.split('|')[1].localeCompare(b.split('|')[1],'tr'));
-  const onceki=mh.value;
-  mh.innerHTML='<option value="">Tüm mahalleler</option>'+ks.map(k=>{const p=k.split('|');
-    return `<option value="${esc(k)}">${esc(p[1])}${(!c&&p[0])?' · '+esc(p[0]):''} (${say[k]})</option>`}).join('');
-  if(ks.includes(onceki))mh.value=onceki;
-}
-
-function ok(x){
-  const t=tl(q.value.trim()),p0=parseFloat(mp.value)||0,y0=parseInt(my.value,10)||0;
-  return (!ic.value||x.c===ic.value)&&(!mh.value||(x.c+'|'+x.m)===mh.value)&&
-    (!t||tl(x.n+' '+x.t).includes(t))&&(p0===0&&y0===0&&x.u ? true : (parseFloat(x.p.replace(',','.'))>=p0&&(x.y||0)>=y0))&&
-    (gs.value===''||(gs.value==='fav'&&(durum[x.l]||{}).fav));
-}
-
-function kiyas(a,b){
-  const s=sirala.value;
-  if(s==='puan')return parseFloat(b.p.replace(',','.'))-parseFloat(a.p.replace(',','.'));
-  if(s==='yorum')return b.y-a.y;
-  if(s==='yakin'){ if(!konum){konumAl(draw);return 0;} return (uzak(a)??1e9)-(uzak(b)??1e9); }
-  return b.s-a.s;
-}
-
-function haritaCiz(){
-  list.style.display='none';mapEl.style.display='block';
-  if(!map){
-    map=L.map('map');
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap katkıcıları'}).addTo(map);
-  }
-  setTimeout(()=>map.invalidateSize(),60);
-  if(katman)map.removeLayer(katman);
-  const pts=I.filter(x=>ok(x)&&typeof x.e==='number'&&typeof x.b==='number');
-  const isaretler=pts.map(x=>L.circleMarker([x.e,x.b],{radius:7,weight:2,color:'#fff',fillColor:RENK[x.A]||'#5f6368',fillOpacity:.9})
-    .bindPopup('<b>'+esc(x.n)+'</b><br>⭐ '+esc(x.p)+' · '+x.y+' yorum<br>'+esc(x.m!=='Bilinmiyor'?x.m:'')+
-      '<br><a href="'+esc(x.l)+'" target="_blank" rel="noopener">Google Haritalar\u2019da aç</a>'));
-  katman=L.featureGroup(isaretler).addTo(map);
-  if(pts.length)map.fitBounds(katman.getBounds().pad(0.15));
-  else map.setView([38.96,35.24],6);
-}
-
-function satir(x){
-  const meta=[esc(x.t),x.f?'<span class="fy">'+esc(x.f)+'</span>':'',esc(x.a)].filter(Boolean).join(' · ');
-  const dist=uzak(x)!=null?'<div class="mah">'+uzak(x).toFixed(1).replace('.',',')+' km</div>':'';
-  const fDurum=durum[x.l]||{};
-  const puanKutusu=x.u?'<b style="font-size:13px">puansız</b><small>—</small>':`<b>${x.p}</b><small>${x.y}</small>`;
-  return `<div class="row"><div class="pt">${puanKutusu}</div><div class="body"><div class="nm">${esc(x.n)}</div>`+
-    (meta?`<div class="meta">${meta}</div>`:'')+(x.m!=='Bilinmiyor'?`<div class="mah">${esc(x.m)}${(ilceler.length>=2&&x.c)?' · '+esc(x.c):''}</div>`:'')+dist+
-    `<div style="margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
-      <a class="go" href="${esc(x.l)}" target="_blank" rel="noopener">Haritada aç</a>
-      <button class="ikon" data-t="fav" data-l="${esc(x.l)}">${fDurum.fav?'★':'☆'}</button>
-    </div></div></div>`;
-}
-
-function rotaAc(){
-  const d=I.filter(x=>(durum[x.l]||{}).fav&&x.e!=null);
-  if(!d.length){alert('Önce yerleri ★ ile işaretle (ve konumları belli olmalı)');return;}
-  const son=d[d.length-1], ara=d.slice(0,-1).map(x=>x.e+','+x.b).join('|');
-  let url='https://www.google.com/maps/dir/?api=1&destination='+son.e+','+son.b+'&travelmode=driving';
-  if(ara) url+='&waypoints='+encodeURIComponent(ara);
-  window.open(url,'_blank');
-}
-
-function wpListe(){
-  const l=I.filter(ok).slice(0,10).filter(x=>x.e!=null);
-  if(!l.length){alert('Listede konumlu yer yok');return;}
-  const t=l.map((x,i)=>`${i+1}. ${x.n} (${x.p}★, ${x.y} yorum)${x.m!=='Bilinmiyor'?' - '+x.m:''}\nhttps://maps.google.com/?q=${x.e},${x.b}`).join('\n\n');
-  window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank');
-}
-
-function favorileriTemizle(){
-  // Süzgeçleri ve seçili mahalleyi sıfırla
-  ic.value='';mq.value='';mahalleListe();mh.value='';
-  mp.value='';my.value='';q.value='';
-  sirala.value='skor';gs.value='';ana='';alt='';
-  draw();scrollTo(0,0);
-  // Favori/not varsa ayrıca sor
-  if(Object.keys(durum).length&&confirm('Favoriler ve notlar da silinsin mi?')){
-    localStorage.removeItem('gezi_durum');
-    durum={};
-    draw();
-  }
-}
-
-list.addEventListener('click',e=>{
-  const b=e.target.closest('.ikon'); if(!b) return;
-  const l=b.dataset.l; if(!l) return;
-  durum[l]=durum[l]||{};
-  if(b.dataset.t==='fav') durum[l].fav=!durum[l].fav;
-  durumYaz(); draw();
-});
-
-function draw(){
-  if(ana===HARITA){haritaCiz();}
-  else{mapEl.style.display='none';list.style.display='';}
-  const f=I.filter(ok),arama=q.value.trim()!=='';
-  const cnt={};f.forEach(x=>{cnt[x.A]=(cnt[x.A]||0)+1});
-  const TEK=ANA.length===1;
-  if(TEK){
-    const a0=ANA[0],c3={};f.forEach(x=>{c3[x.S]=(c3[x.S]||0)+1});
-    tabs.innerHTML=`<button role="tab" aria-selected="${ana===''}" data-a="">Tümü (${f.length})</button>`+
-      O[a0].filter(s=>c3[s]).map(s=>`<button role="tab" aria-selected="${ana===a0&&alt===s}" data-a="${esc(a0)}" data-s="${esc(s)}">${esc(s)} (${c3[s]})</button>`).join('')+
-      `<button role="tab" aria-selected="${ana===HARITA}" data-a="${HARITA}">🗺️ Harita</button>`;
-  }else tabs.innerHTML=`<button role="tab" aria-selected="${ana===''}" data-a="">Tümü (${f.length})</button>`+
-    ANA.map(a=>`<button role="tab" aria-selected="${ana===a}" data-a="${esc(a)}">${esc(a)} (${cnt[a]||0})</button>`).join('')+
-    `<button role="tab" aria-selected="${ana===HARITA}" data-a="${HARITA}">🗺️ Harita</button>`;
-
-  if(!TEK&&ana&&ana!==HARITA){
-    const c2={};f.filter(x=>x.A===ana).forEach(x=>{c2[x.S]=(c2[x.S]||0)+1});
-    chips.innerHTML=`<button aria-pressed="${alt===''}" data-s="">Hepsi</button>`+
-      O[ana].filter(s=>c2[s]).map(s=>`<button aria-pressed="${alt===s}" data-s="${esc(s)}">${esc(s)} (${c2[s]})</button>`).join('');
-    chips.style.display='';
-  }else chips.style.display='none';
-
-  if(ana===HARITA)return;
-
-  const sec=f.filter(x=>arama||!ana||(x.A===ana&&(!alt||x.S===alt)));
-  const tumu=arama||!ana;let out='';
-
-  ANA.forEach(a=>O[a].forEach(s=>{
-    const it=sec.filter(x=>x.A===a&&x.S===s);if(!it.length)return;
-    it.sort(kiyas);
-    const bas=tumu?a+' · '+s:(alt?'':s);
-    out+=(bas?`<h2>${esc(bas)}</h2>`:'')+'<div>'+it.map(satir).join('')+'</div>';
-  }));
-  list.innerHTML=out||'<p class="none">Sonuç yok. Süzgeçleri gevşetmeyi dene.</p>';
-}
-
-tabs.onclick=e=>{const b=e.target.closest('button');if(b){ana=b.dataset.a;alt=b.dataset.s||'';draw();scrollTo(0,0)}};
-chips.onclick=e=>{const b=e.target.closest('button');if(b){alt=b.dataset.s;draw()}};
-ic.onchange=()=>{mahalleListe();draw()};
-mq.oninput=()=>{mahalleListe();draw()};
-mh.onchange=draw;
-mp.oninput=draw;
-my.oninput=draw;
-q.oninput=draw;
-gs.onchange=draw;
-sirala.onchange=draw;
-
-mahalleListe();
-draw();
-</script></body></html>
-"""
 
 
 if __name__ == "__main__":

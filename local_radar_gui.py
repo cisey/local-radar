@@ -526,7 +526,7 @@ class Pencere:
 
         self.baslat = ttk.Button(aksiyon_bar, text=t("baslat"), style="Start.TButton", command=self.baslat_tikla)
         self.baslat.pack(side="left")
-        self.dur = ttk.Button(aksiyon_bar, text=t("durdur"), style="Stop.TButton", command=self.durdur.set, state="disabled")
+        self.dur = ttk.Button(aksiyon_bar, text=t("durdur"), style="Stop.TButton", command=self.durdur_tikla, state="disabled")
         self.dur.pack(side="left", padx=(8, 16))
 
         self.esik_btn = ttk.Button(aksiyon_bar, text=t("kategori_esikleri"), command=self.kategori_esikleri_penceresi)
@@ -683,6 +683,7 @@ class Pencere:
             "dil": self.dil.get(),
             "yemek_sadece": self._yemek_sadece_mi(),
             "kategori_esikleri": self._kategori_esikleri_kayitlik(),
+            "tarama_modu": self.mod_var.get(),
             **{k: v.get() for k, v in self.kategoriler.items()},
         }
 
@@ -738,8 +739,17 @@ class Pencere:
         else:
             self.tumu.set(False)
         self._tumu_guncelle = False
-        if self.sabit_izgara.get():
+        kaydedilen_mod = a.get("tarama_modu", "")
+        gecerli_modlar = [t("mod_ozel"), t("mod_hizli"), t("mod_normal"), t("mod_yemek"), t("mod_kapsamli"), t("mod_sabit")]
+        
+        # Eğer kaydedilmiş mod varsa ve dil değişmediyse onu yükle, yoksa mevcut mantıkla devam et
+        if kaydedilen_mod and kaydedilen_mod in gecerli_modlar:
+            self.mod_var.set(kaydedilen_mod)
+        elif self.sabit_izgara.get():
             self.mod_var.set(t("mod_sabit"))
+        else:
+            self.mod_var.set(t("mod_ozel"))
+            
         self._hucre_km_durum_guncelle()
 
     def profil_kaydet(self):
@@ -988,6 +998,11 @@ class Pencere:
         self.sure.configure(text=metin)
         self.kok.after(1000, self.sure_tikla)
 
+    def durdur_tikla(self):
+        self.durdur.set()
+        self.dur.configure(state="disabled")
+        self.yaz("⏹ Durdurma sinyali gönderildi, mevcut adım tamamlanıyor...")
+
     def baslat_tikla(self):
         try:
             min_puan = float(self.puan.get().replace(",", "."))
@@ -1051,7 +1066,10 @@ class Pencere:
 
             ilce, il = v["ilce"], v["il"]
             mahalleler = [m.strip() for m in v["mahalle"].split(",") if m.strip()]
-            slug = re.sub(r"[^a-z0-9]+", "_", g.fold("_".join([ilce] + mahalleler))).strip("_")
+            # Türkçe karakterleri İngilizceye çevirip, ilk harfleri büyüterek dosya adı oluştur
+            isim_havuzu = "_".join([ilce] + mahalleler)
+            slug_ham = g.fold(isim_havuzu).replace(" ", "_")
+            slug = re.sub(r"[^a-zA-Z0-9_]+", "", slug_ham).title()
 
             ham_yolu = f"{g.DOSYA_HAM_PREFIX}{slug}.json"
             ham_kullan = None
