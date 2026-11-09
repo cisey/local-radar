@@ -2071,12 +2071,18 @@ def _overpass_indir(s, w, n, e):
     return None, " | ".join(hatalar) if hatalar else "bilinmeyen hata"
 
 
+_SINIR_OTURUM_HATA = False
+
+
 def sinirlari_hazirla(alanlar):
-    global SINIRLAR
+    global SINIRLAR, _SINIR_OTURUM_HATA
     SINIRLAR = []
     for k in MAHALLE_ISTATISTIK:
         MAHALLE_ISTATISTIK[k] = 0
     if not alanlar:
+        return 0
+    if _SINIR_OTURUM_HATA:
+        LOG("   Boundary servers failed earlier in this session; skipping download.")
         return 0
     kuzey = max(a[0] + a[2] / 111.0 for a in alanlar) + 0.01
     guney = min(a[0] - a[2] / 111.0 for a in alanlar) - 0.01
@@ -2113,6 +2119,7 @@ def sinirlari_hazirla(alanlar):
             }
             _json_yaz(SINIR_DOSYASI, onbellek)
             LOG(f"   Boundaries failed: {hata} — falling back to per-query.")
+            _SINIR_OTURUM_HATA = True
             return 0
         onbellek[anahtar] = {"t": time.strftime("%Y-%m-%d"), "veri": veri, "hata": False}
         _json_yaz(SINIR_DOSYASI, onbellek)
