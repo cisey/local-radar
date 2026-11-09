@@ -58,6 +58,8 @@ DOSYA_HEPSI_JSON = "local_radar_all.json"
 DOSYA_HEPSI_HTML = "local_radar_all.html"
 DOSYA_HEPSI_HTML_SADE = "local_radar_all.html"  # Artık tek dosya
 DOSYA_HEPSI_KML = "local_radar_all.kml"
+# False: dev "HEPSİ" dosyaları (local_radar_all.*) üretilmez. Havuz (pool.json) yine güncellenir.
+HEPSI_URET = False
 
 DOSYA_HAM_PREFIX = "raw_"
 DOSYA_ARA_KAYIT_PREFIX = "scan_resume_"
@@ -2231,6 +2233,8 @@ def manuel_mekan_kaydet(veri):
 
 
 def hepsi_yenile(ayar=None):
+    if not HEPSI_URET:
+        return 0
     ayar = ayar or {}
     hepsi = sorted(havuz_yukle().values(), key=lambda x: -x.get("Güvenilir Skor", 0))
     manuel_ekle(hepsi, ayar, MIN_OY, ilce_filtre=False)
@@ -2315,7 +2319,7 @@ def calistir(ayar, ilerleme=lambda i, n, m: print(f"[{i}/{n}] {m}"), durdur=lamb
             "okunan": len(tum), "puansiz": puansiz, "adet": len(kayitlar),
             "yeni": yeni, "guncellenen": guncellenen, "kayip": kayip}
 
-    if birlestir:
+    if birlestir and HEPSI_URET:
         hepsi = sorted(havuz_yukle().values(), key=lambda x: -x["Güvenilir Skor"])
         manuel_ekle(hepsi, ayar, min_oy, ilce_filtre=False)
         hepsi = esik_uygula(hepsi, min_puan, min_oy, esikler=KATEGORI_ESIKLERI)
@@ -2345,7 +2349,8 @@ def main():
     print(f"   {ozet['okunan']} places read. {ozet['adet']} passed filters.")
     print(f"   New: {ozet['yeni']}  |  Updated: {ozet['guncellenen']}  |  No longer visible: {ozet.get('kayip', 0)}")
     print(f"   Scan folder : {ozet['klasor']}")
-    print(f"   Combined guide ({ozet['toplam']} places): {ozet['hepsi_html']}")
+    if ozet.get('hepsi_html'):
+        print(f"   Combined guide ({ozet['toplam']} places): {ozet['hepsi_html']}")
 
 
 if __name__ == "__main__":

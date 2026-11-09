@@ -48,7 +48,7 @@ ISTANBUL = ["Adalar", "Arnavutköy", "Ataşehir", "Avcılar", "Bağcılar", "Bah
             "Ümraniye", "Üsküdar", "Zeytinburnu"]
 
 
-HEPSI_SONUNDA_YENILE = True   # kuyruk bitince "HEPSİ" dosyaları (local_radar_all.*) bir kere yenilenir
+HEPSI_SONUNDA_YENILE = False   # kuyruk bitince "HEPSİ" dosyaları (local_radar_all.*) bir kere yenilenir
 _HEPSI_ERTELE = {"acik": False}
 
 

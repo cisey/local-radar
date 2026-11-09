@@ -47,7 +47,7 @@ METINLER = {
         "kategori_esikleri": "🎚️ Kategori Eşikleri...",
         "profil_kaydet": "💾 Profil Kaydet", "profil_yukle": "📂 Profil Yükle",
         "sure": "Süre: –",
-        "hazir": "📡 Local Radar hazır. Çoklu ilçe taramalarında sonuçlar 'local_radar_all.html' dosyasında birikir.",
+        "hazir": "📡 Local Radar hazır. Çoklu ilçe taramalarında sonuçlar havuzda (pool.json) birikir.",
         "ipucu": "İpucu: 'Tarama yapma, son taramayı kullan' seçeneğiyle mevcut veriyi saniyeler içinde yeniden işleyebilirsiniz.",
         "mod_ozel": "Özel Seçim",
         "mod_hizli": "Hızlı (yemek ve gezi, tek parça)",
@@ -545,9 +545,9 @@ class Pencere:
         self.rehber_sade.pack(side="left", padx=(0, 12))
 
         self.hepsi_rehber = ttk.Button(cikti_kart, text=t("hepsi_rehberi"), command=lambda: self.ac("hepsi_html"))
-        self.hepsi_rehber.pack(side="left", padx=(0, 6))
+        # HEPSİ düğmeleri gizlendi (dosya çok büyük)
         self.hepsi_sade = ttk.Button(cikti_kart, text=t("hepsi_sade_rehberi"), command=lambda: self.ac("hepsi_html_sade"))
-        self.hepsi_sade.pack(side="left", padx=(0, 12))
+        # HEPSİ (Sade) düğmesi gizlendi
 
         self.klasor_btn = ttk.Button(cikti_kart, text=t("klasor_ac"), command=lambda: self.ac("klasor"), state="disabled")
         self.klasor_btn.pack(side="right")
