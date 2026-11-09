@@ -1,0 +1,87 @@
+# Her satıra bir ilçe yaz. Yukarıdan aşağı sırayla taranır. Başına # koyarsan atlanır.
+# İl yazılmamış satırlar İstanbul sayılır. Başka il için: Gaziantep/Şehitkamil
+# Yarıçap vermek için sonuna :km yaz, örnek: Hatay/Erzin:10  (yarıçaplı satırlar yeniden taranır)
+# Biten ilçeler gece_durum.json'da kayıtlı, listede kalsalar da tekrar taranmaz.
+
+# ===== DOĞU / GÜNEYDOĞU İL MERKEZLERİ =====
+Bitlis/Bitlis
+Bingöl/Bingöl
+Siirt/Siirt
+Şırnak/Şırnak
+Hakkari/Hakkari
+
+# ===== İÇ ANADOLU / KARADENİZ İL MERKEZLERİ =====
+Karaman/Karaman
+Kırşehir/Kırşehir
+Yozgat/Yozgat
+Çankırı/Çankırı
+Tokat/Tokat
+Çorum/Çorum
+Zonguldak/Zonguldak
+Bartın/Bartın
+Karabük/Karabük
+Kastamonu/Kastamonu
+Sinop/Sinop
+Gümüşhane/Gümüşhane
+
+# ===== BATI İL MERKEZLERİ =====
+Isparta/Isparta
+Burdur/Burdur
+Bilecik/Bilecik
+Çanakkale/Çanakkale
+Edirne/Edirne
+Kırklareli/Kırklareli
+Yalova/Yalova
+
+# ===== BÜYÜKŞEHİR MERKEZ İLÇELERİ (ANKARA, ANTALYA, SAMSUN, BALIKESİR, MANİSA, AYDIN, MUĞLA, TEKİRDAĞ) =====
+Ankara/Mamak
+Ankara/Etimesgut
+Ankara/Sincan
+Ankara/Altındağ
+Ankara/Pursaklar
+Antalya/Döşemealtı
+Samsun/Canik
+Samsun/Tekkeköy
+Balıkesir/Altıeylül
+Balıkesir/Karesi
+Manisa/Yunusemre
+Manisa/Şehzadeler
+Aydın/Efeler
+Muğla/Menteşe
+Tekirdağ/Süleymanpaşa
+Tekirdağ/Çorlu
+
+# ===== İZMİR MERKEZ İLÇELERİ =====
+İzmir/Konak
+İzmir/Karşıyaka
+İzmir/Bornova
+İzmir/Buca
+İzmir/Bayraklı
+İzmir/Çiğli
+İzmir/Karabağlar
+İzmir/Gaziemir
+İzmir/Balçova
+İzmir/Narlıdere
+İzmir/Güzelbahçe
+
+# ===== İSTANBUL MERKEZ İLÇELERİ (EKSİKLER) =====
+İstanbul/Ataşehir
+İstanbul/Ümraniye
+İstanbul/Pendik
+İstanbul/Tuzla
+İstanbul/Bağcılar
+İstanbul/Bahçelievler
+İstanbul/Başakşehir
+İstanbul/Esenyurt
+İstanbul/Beylikdüzü
+İstanbul/Avcılar
+İstanbul/Küçükçekmece
+İstanbul/Gaziosmanpaşa
+İstanbul/Kağıthane
+İstanbul/Bayrampaşa
+İstanbul/Esenler
+İstanbul/Güngören
+İstanbul/Sultangazi
+İstanbul/Sancaktepe
+İstanbul/Çekmeköy
+İstanbul/Arnavutköy
