@@ -1,0 +1,12 @@
+ayarlar.json
+telegram_ayar.json
+settings.json
+gece_ilceler.txt
+gece_durum.json
+gece_log.txt
+pool.json
+raw_pool.json
+tarama_json/
+output/
+LocalRadar/
+__pycache__/

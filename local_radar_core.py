@@ -61,8 +61,9 @@ DOSYA_HEPSI_KML = "local_radar_all.kml"
 # False: dev "HEPSİ" dosyaları (local_radar_all.*) üretilmez. Havuz (pool.json) yine güncellenir.
 HEPSI_URET = False
 
-DOSYA_HAM_PREFIX = "raw_"
-DOSYA_ARA_KAYIT_PREFIX = "scan_resume_"
+KLASOR_TARAMA_JSON = "tarama_json"     # ilçe taramalarının ham/ara kayıt JSON'ları burada toplanır
+DOSYA_HAM_PREFIX = KLASOR_TARAMA_JSON + "/raw_"
+DOSYA_ARA_KAYIT_PREFIX = KLASOR_TARAMA_JSON + "/scan_resume_"
 
 # Legacy aliases (internal use)
 HAVUZ = DOSYA_HAVUZ
@@ -896,7 +897,7 @@ LEAFLET_CSS = r""".leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-mark
 
 # ---------- Yemek alt kategorileri ----------
 YEMEK_ALT_SIRA = ["Döner & Kebap", "Çiğ Köfte", "Pide & Lahmacun", "Fast food & Burger & Pizza",
-                  "Türk & Aile Restoranı", "Kafe & Kahve", "Kahvaltı", "Fırın & Tatlı", "Kasap"]
+                  "Türk & Aile Restoranı", "Balık & Deniz Ürünleri", "Kafe & Kahve", "Kahvaltı", "Fırın & Tatlı", "Kasap"]
 
 _YEMEK_ALT_KURAL = [
     ("Kasap", ["kasap", "sarkuteri", "kasab"]),
@@ -912,10 +913,26 @@ _YEMEK_ALT_KURAL = [
 ]
 
 
+BALIK_ALT = "Balık & Deniz Ürünleri"
+_BALIK_TUR = ("balik restoran", "deniz mahsul", "deniz urun", "kabuklu deniz")
+_BALIK_AD = re.compile(r"\bbalikci|alabalik|\bbalik\s+(?:lokanta|restoran|restaurant|evi|ekmek|sofra|tava|izgara|"
+                       r"pisirici|meyhane|dunya|cesme|pazari|mutfak)|\bbalik\s*&|deniz\s*urun|deniz\s*mahsul")
+_BALIK_TUR_ISARET = ("restor", "lokanta", "balik", "deniz", "meyhane", "kebap", "izgara", "yemek")
+
+
+def balik_mi(ad, tur):
+    t = fold(tur or "")
+    if any(k in t for k in _BALIK_TUR):
+        return True
+    return bool(_BALIK_AD.search(fold(ad or ""))) and (not t or any(k in t for k in _BALIK_TUR_ISARET))
+
+
 def yemek_alt(r):
     bolum = r.get("Bölüm", "")
     if not (ANA.get(bolum) == "Yemek" or bolum == "Alışveriş"):
         return None
+    if ANA.get(bolum) == "Yemek" and balik_mi(r.get("Yer", ""), r.get("Tür", "")):
+        return BALIK_ALT
     m = fold(f"{r.get('Yer', '')} {r.get('Tür', '') or ''}")
     for alt, kws in _YEMEK_ALT_KURAL:
         if any(k in m for k in kws):
@@ -1000,7 +1017,7 @@ a.nm-link::after{content:'';position:absolute;inset:0}
 
 <div class="head">
   <h1>📡 __BASLIK__</h1>
-  <div class="sub-meta">__TARIH__ · <span id="yerSayisi">0</span> mekan</div>
+  <div class="sub-meta">Veri tarihi: __TARIH__ · <span id="yerSayisi">0</span> mekan</div>
 </div>
 
 <div class="filters">
@@ -1190,11 +1207,888 @@ draw();
 SABLON_SADE = SABLON
 
 
+# ---------- "En iyi 10" kutusu (Tümü görünümünün en üstü) ----------
+EN_IYI_ISARET = "enIyiKutusu"
+EN_IYI_CSS = ("<style>.eniyi-not{font-size:12px;line-height:1.5;color:var(--muted);margin:10px 6px 4px}"
+              ".eniyi-h{color:var(--gold)}</style>")
+EN_IYI_JS = r"""
+function enIyiKutusu(f,tumu,arama){
+  if(ana!==''||arama)return '';
+  const pn=x=>parseFloat(String(x.p).replace(',','.'))||0;
+  const ad=f.filter(x=>!x.u&&pn(x)>=4.3).sort((a,b)=>(b.y||0)-(a.y||0)||pn(b)-pn(a)).slice(0,10);
+  if(!ad.length)return '';
+  return '<h2 class="eniyi-h">⭐ En iyi '+ad.length+'</h2><div>'+ad.map(satir).join('')+'</div>'+
+    '<p class="eniyi-not"><b>Bu liste nasıl seçildi?</b> Google Haritalar puanı <b>4,3 ve üzeri</b> olan yerler alınır, '+
+    '<b>yorum sayısı en çok olandan başlayarak</b> sıralanır. Yani çok kişinin gidip beğendiği yerler öne çıkar; '+
+    'az yorumlu yüksek puanlar ve puanı düşük kalabalık yerler listeye girmez. Veriler Google Haritalar\'dan alınmıştır ve değişebilir.</p>';
+}
+"""
+EN_IYI_ESKI = "list.innerHTML=out||'<p class=\"none\">Aramanıza uygun mekan bulunamadı.</p>';"
+EN_IYI_YENI = "list.innerHTML=enIyiKutusu(f,tumu,arama)+(out||'<p class=\"none\">Aramanıza uygun mekan bulunamadı.</p>');"
+
+
+def en_iyi_ekle(h):
+    """Rehber sayfasına 'En iyi 10' kutusunu ekler. Zaten varsa ya da sayfa yapısı farklıysa dokunmaz."""
+    if EN_IYI_ISARET in h or "function draw(){" not in h or EN_IYI_ESKI not in h or "</head>" not in h:
+        return h
+    h = h.replace("function draw(){", EN_IYI_JS + "function draw(){", 1)
+    h = h.replace(EN_IYI_ESKI, EN_IYI_YENI, 1)
+    return h.replace("</head>", EN_IYI_CSS + "</head>", 1)
+
+
+
+# ---------- Mekan satırı: cadde/no ve güvenilmez mahalle bilgisi gizlenir ----------
+ADRES_V1 = "${/*ilceMahalleSatiri*/mah?`<div class=\"meta-adres\">${esc(mah)}</div>`:''}"
+ADRES_V2 = "${/*adresGizli*/''}"
+ADRES_DEGISIM = [
+    ("const meta=[x.t,mah].filter(Boolean)",
+     "const meta=[x.t].filter(Boolean)"),
+    ("${x.a?`<div class=\"meta-adres\">${esc(x.a)}</div>`:''}", ADRES_V2),
+    ("tl(x.n+' '+x.t+' '+x.m)",
+     "tl(x.n+' '+x.t+' '+x.m+' '+(x.a||''))"),
+]
+
+
+def adres_sade_ekle(h):
+    """Mekan satırında adres satırını gizler (arama adresi yine kapsar). Tekrar çalıştırılabilir."""
+    if "adresGizli" in h:
+        return h
+    if ADRES_V1 in h:                      # önceki sürümle güncellenmiş sayfa
+        return h.replace(ADRES_V1, ADRES_V2, 1)
+    if not all(eski in h for eski, _ in ADRES_DEGISIM[:2]):
+        return h
+    for eski, yeni in ADRES_DEGISIM:
+        h = h.replace(eski, yeni, 1)
+    return h
+
+
+# ---------- Paket: sayfalama, arama gecikmesi, koyu+kümeli harita, mesafe, favori, paylaşılabilir link ----------
+OZELLIK_ISARET = "ozellikPaketi"
+OZELLIK_HEAD = (
+    '<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">'
+    '<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">'
+    '<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>'
+    '<style>/*ozellikPaketi*/'
+    '.daha{display:block;width:100%;margin:-4px 0 16px;padding:12px;font:inherit;font-size:13.5px;font-weight:700;'
+    'color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent);border-radius:14px;cursor:pointer}'
+    '.fav{display:block;margin:2px auto 0;position:relative;z-index:2;background:none;border:0;font-size:17px;'
+    'line-height:1;padding:4px;cursor:pointer}'
+    '</style>')
+OZELLIK_JS = r"""
+/*ozellikPaketi*/
+const LIM=60;let ekstra={},sonImza='',qt=null;
+const sk=x=>{if(x.u)return -1;const y=x.y||0,p=parseFloat(String(x.p).replace(',','.'))||0;return y/(y+100)*p+100/(y+100)*4};
+function mesafeYazi(d){return d<1?Math.round(d*1000)+' m':d.toFixed(1).replace('.',',')+' km'}
+function bolumHtml(it,k){
+  const n=LIM+(ekstra[k]||0);
+  let s='<div>'+it.slice(0,n).map(satir).join('')+'</div>';
+  if(it.length>n)s+='<button class="daha" data-k="'+esc(k)+'">Daha fazla göster ('+(it.length-n)+' mekan daha)</button>';
+  return s;
+}
+mh.style.display='none';
+gs.style.display='';
+gs.innerHTML='<option value="">Tümü</option><option value="fav">❤️ Favori</option>';
+function favSay(){const n=I.filter(x=>(durum[x.l]||{}).fav).length;gs.options[1].textContent='❤️ Favori ('+n+')';}
+function hashYaz(){
+  try{
+    const p=new URLSearchParams();
+    if(q.value.trim())p.set('q',q.value.trim());
+    if(mp.value)p.set('mp',mp.value);
+    if(my.value)p.set('my',my.value);
+    if(ic.value)p.set('ic',ic.value);
+    if(sirala.value==='puan'||sirala.value==='yorum')p.set('s',sirala.value);
+    if(ana&&ana!==HARITA){p.set('a',ana);if(alt)p.set('t',alt);}
+    if(gs.value)p.set('g',gs.value);
+    const s=p.toString();
+    history.replaceState(null,'',location.pathname+location.search+(s?'#'+s:''));
+  }catch(e){}
+}
+function hashOku(){
+  try{
+    const p=new URLSearchParams(location.hash.slice(1));
+    if(p.get('q'))q.value=p.get('q');
+    if(p.get('mp'))mp.value=p.get('mp');
+    if(p.get('my'))my.value=p.get('my');
+    const i0=p.get('ic');if(i0&&[...ic.options].some(o=>o.value===i0))ic.value=i0;
+    const s0=p.get('s');if(s0==='puan'||s0==='yorum')sirala.value=s0;
+    if(p.get('g')==='fav')gs.value='fav';
+    const a0=p.get('a');if(a0&&ANA.includes(a0)){ana=a0;alt=p.get('t')||'';}
+  }catch(e){}
+}
+function ozetGuncelle(){
+  const im=[q.value,mp.value,my.value,ic.value,sirala.value,ana,alt,gs.value].join('|');
+  if(im!==sonImza){ekstra={};sonImza=im;}
+  favSay();hashYaz();
+}
+list.addEventListener('click',e=>{
+  const d=e.target.closest('.daha');
+  if(d){const y=window.scrollY;ekstra[d.dataset.k]=(ekstra[d.dataset.k]||0)+100;draw();window.scrollTo(0,y);return;}
+  const b=e.target.closest('.fav');
+  if(b){
+    const l=b.dataset.l;durum[l]=durum[l]||{};durum[l].fav=!durum[l].fav;
+    if(!durum[l].fav)delete durum[l];
+    durumYaz();b.textContent=(durum[l]||{}).fav?'❤️':'🤍';favSay();
+    if(gs.value==='fav')draw();
+  }
+});
+(function(){
+  const r=document.querySelector('button.reset');if(!r)return;
+  const w=document.createElement('div');w.style.cssText='display:flex;justify-content:flex-end;gap:14px';
+  const b=document.createElement('button');b.className='reset';b.textContent='🔗 Bu görünümü paylaş';
+  b.onclick=()=>{
+    hashYaz();const u=location.href;
+    if(navigator.share){navigator.share({title:document.title,url:u}).catch(()=>{});}
+    else if(navigator.clipboard){navigator.clipboard.writeText(u).then(()=>{b.textContent='✓ Link kopyalandı';setTimeout(()=>{b.textContent='🔗 Bu görünümü paylaş'},2000)},()=>{prompt('Linki kopyala',u)});}
+    else prompt('Linki kopyala',u);
+  };
+  r.parentNode.insertBefore(w,r);w.appendChild(b);w.appendChild(r);
+})();
+hashOku();
+"""
+OZELLIK_DEGISIM = [
+    ("return b.s-a.s;", "return sk(b)-sk(a);"),
+    ("'<div>'+it.map(satir).join('')+'</div>'", "bolumHtml(it,a+'|'+s)"),
+    ("mp.oninput=draw;my.oninput=draw;q.oninput=draw;",
+     "mp.oninput=()=>{clearTimeout(qt);qt=setTimeout(draw,200)};my.oninput=mp.oninput;"
+     "q.oninput=()=>{clearTimeout(qt);qt=setTimeout(draw,200)};"),
+    ("yerSayisi.textContent=f.length;", "yerSayisi.textContent=f.length;ozetGuncelle();"),
+    ("const meta=[x.t].filter(Boolean).map(esc).join(' · ');",
+     "const dm=uzak(x);const meta=[x.t,dm!=null?'\U0001F4CD '+mesafeYazi(dm):''].filter(Boolean).map(esc).join(' · ');"),
+    ('<div class="pt">${puan}</div>',
+     '<div class="pt">${puan}<button class="fav" data-l="${esc(x.l)}" aria-label="Favori">${(durum[x.l]||{}).fav?\'❤️\':\'\U0001F90D\'}</button></div>'),
+    ("L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);",
+     "const koyu=!!(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);"
+     "L.tileLayer(koyu?'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png':'https://tile.openstreetmap.org/{z}/{x}/{y}.png',"
+     "{maxZoom:19,subdomains:'abcd',attribution:'© OpenStreetMap'+(koyu?' © CARTO':'')}).addTo(map);"),
+    ("katman=L.featureGroup(isaretler).addTo(map);",
+     "katman=(L.markerClusterGroup?L.markerClusterGroup({chunkedLoading:true,maxClusterRadius:50,disableClusteringAtZoom:17}):L.featureGroup());"
+     "isaretler.forEach(m=>katman.addLayer(m));katman.addTo(map);"),
+]
+
+
+def ozellik_ekle(h):
+    """Sayfalama, arama gecikmesi, koyu/kümeli harita, mesafe, favori, paylaşılabilir link, güvenilir skor düzeltmesi.
+    Tekrar çalıştırılabilir; sayfa yapısı beklenenden farklıysa hiçbir şeye dokunmaz."""
+    if OZELLIK_ISARET in h or "function draw(){" not in h or "</head>" not in h:
+        return h
+    if not all(h.count(eski) == 1 for eski, _ in OZELLIK_DEGISIM):
+        return h
+    for eski, yeni in OZELLIK_DEGISIM:
+        h = h.replace(eski, yeni, 1)
+    h = h.replace("function draw(){", OZELLIK_JS + "function draw(){", 1)
+    return h.replace("</head>", OZELLIK_HEAD + "</head>", 1)
+
+
+
+# ---------- Filtre kutularına açıklayıcı etiket ----------
+ETIKET_ISARET = "etiketPaketi"
+ETIKET_JS = r"""
+/*etiketPaketi*/
+[[mp,'En az puan','örn. 4,3'],[my,'En az yorum','örn. 50'],[gs,'Görünüm','']].forEach(([el,t,ph])=>{
+  const w=document.createElement('label');
+  w.style.cssText='display:flex;flex-direction:column;gap:3px;flex:1;min-width:0;font-size:11.5px;font-weight:600;color:var(--muted)';
+  el.parentNode.insertBefore(w,el);w.append(t,el);if(ph)el.placeholder=ph;
+});
+"""
+
+
+def etiket_ekle(h):
+    if ETIKET_ISARET in h or "ozellikPaketi" not in h or "function draw(){" not in h:
+        return h
+    return h.replace("function draw(){", ETIKET_JS + "function draw(){", 1)
+
+
+# ---------- Paket 2: Tümü önizleme (kategori başına 5), favori sekmesi, tek satır kalp, harita düzeltmesi ----------
+PAKET2_ISARET = "paket2Paketi"
+PAKET2_FAV_CSS_ESKI = (".fav{display:block;margin:2px auto 0;position:relative;z-index:2;background:none;border:0;font-size:17px;"
+                       "line-height:1;padding:4px;cursor:pointer}")
+PAKET2_FAV_CSS_YENI = (".fav{display:inline;position:relative;z-index:2;background:none;border:0;font-size:14px;"
+                       "line-height:1;padding:0;margin:0;cursor:pointer}")
+PAKET2_HEAD = (
+    "<style>/*paket2Paketi*/"
+    ".gec{display:block;width:100%;margin:-4px 0 16px;padding:12px;font:inherit;font-size:13.5px;font-weight:700;"
+    "color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent);border-radius:14px;cursor:pointer}"
+    "@media (prefers-color-scheme:dark){#map .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.95)}}"
+    "</style>")
+PAKET2_JS = r"""
+/*paket2Paketi*/
+let ONIZ=false;const ONIZ_N=7;
+function bolumHtml2(it,k){
+  if(ONIZ){
+    let s='<div>'+it.slice(0,ONIZ_N).map(satir).join('')+'</div>';
+    if(it.length>ONIZ_N)s+='<button class="gec" data-gec="'+esc(k)+'">'+esc(k.split('|')[1])+' bölümünün tamamını gör ('+it.length+') →</button>';
+    return s;
+  }
+  return bolumHtml(it,k);
+}
+(gs.closest('label')||gs).style.display='none';
+const _drawEski=draw;
+draw=function(){
+  ONIZ=(ana===''&&q.value.trim()===''&&gs.value!=='fav');
+  _drawEski();
+  favSekme();
+};
+function favSekme(){
+  const eski=tabs.querySelector('button[data-fav]');if(eski)eski.remove();
+  const n=I.filter(x=>(durum[x.l]||{}).fav).length;
+  if(n>0||gs.value==='fav'){
+    if(gs.value==='fav')tabs.querySelectorAll('button[aria-selected="true"]').forEach(b=>b.setAttribute('aria-selected','false'));
+    const bt=document.createElement('button');bt.setAttribute('role','tab');bt.dataset.fav='1';
+    bt.textContent='❤️ Favorilerim ('+n+')';bt.setAttribute('aria-selected',gs.value==='fav'?'true':'false');
+    tabs.appendChild(bt);
+  }
+}
+list.addEventListener('click',e=>{if(e.target.closest('.fav'))favSekme();});
+tabs.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.fav){e.stopPropagation();gs.value=gs.value==='fav'?'':'fav';ana='';alt='';draw();}
+  else if(gs.value==='fav')gs.value='';
+},true);
+list.addEventListener('click',e=>{
+  const g=e.target.closest('.gec');if(!g)return;
+  const p=g.dataset.gec.split('|');gs.value='';ana=p[0];alt=p[1];draw();
+  tabs.scrollIntoView({behavior:'smooth',block:'start'});
+});
+"""
+PAKET2_FIT_ESKI = "if(pts.length)map.fitBounds(katman.getBounds().pad(0.15));"
+PAKET2_FIT_YENI = ("if(pts.length){const la=pts.map(x=>x.e).sort((a,b)=>a-b),lo=pts.map(x=>x.b).sort((a,b)=>a-b),"
+                   "a1=Math.floor(pts.length*.01),a2=Math.max(a1,Math.ceil(pts.length*.99)-1);"
+                   "map.fitBounds([[la[a1],lo[a1]],[la[a2],lo[a2]]],{padding:[20,20]});}")
+PAKET2_NM_ESKI = "${esc(x.n)}</a></div>"
+PAKET2_NM_YENI = ("${esc(x.n)}</a>\u00a0<button class=\"fav\" data-l=\"${esc(x.l)}\" aria-label=\"Favori\">"
+                  "${(durum[x.l]||{}).fav?'❤️':'\U0001F90D'}</button></div>")
+PAKET2_DEGISIM = [
+    (OZELLIK_DEGISIM[5][1], OZELLIK_DEGISIM[5][0]),                 # kalp artık puan sütununda değil
+    (PAKET2_NM_ESKI, PAKET2_NM_YENI),                                # kalp isim satırında
+    (PAKET2_FAV_CSS_ESKI, PAKET2_FAV_CSS_YENI),
+    (OZELLIK_DEGISIM[6][1], OZELLIK_DEGISIM[6][0]),                 # CARTO (anahtar ister) yerine OSM
+    (PAKET2_FIT_ESKI, PAKET2_FIT_YENI),
+    ("bolumHtml(it,a+'|'+s)", "bolumHtml2(it,a+'|'+s)"),
+    ("if(ana!==''||arama)return '';", "if(ana!==''||arama||gs.value==='fav')return '';"),
+]
+
+
+def paket2_ekle(h):
+    if PAKET2_ISARET in h or "ozellikPaketi" not in h or "function draw(){" not in h or "</head>" not in h:
+        return h
+    if not all(h.count(eski) == 1 for eski, _ in PAKET2_DEGISIM):
+        return h
+    for eski, yeni in PAKET2_DEGISIM:
+        h = h.replace(eski, yeni, 1)
+    h = h.replace("function draw(){", PAKET2_JS + "function draw(){", 1)
+    return h.replace("</head>", PAKET2_HEAD + "</head>", 1)
+
+
+# ---------- Favori özelliği kaldırıldı (kalp düğmesi, Favorilerim sekmesi) ----------
+FAV_KALDIR_ISARET = "favoriKaldirildi"
+FAV_KALDIR_JS = r"""
+/*favoriKaldirildi*/
+favSekme=function(){};
+gs.value='';
+"""
+
+
+def favori_kaldir(h):
+    """Kalp düğmelerini ve Favorilerim sekmesini kaldırır. Tekrar çalıştırılabilir."""
+    if FAV_KALDIR_ISARET in h or "ozellikPaketi" not in h or "function draw(){" not in h:
+        return h
+    h = re.sub(' ?<button class="fav"[^>]*>.*?</button>', '', h, flags=re.S)
+    h = h.replace("confirm('Tüm favoriler ve filtreler sıfırlansın mı?')", "confirm('Filtreler sıfırlansın mı?')")
+    if "function favSekme(" in h:
+        h = h.replace("function draw(){", FAV_KALDIR_JS + "function draw(){", 1)
+    return h
+
+
+# ---------- Şehre göre ölçeklenen skor (En iyi 10 + kategori içi Güvenilir Skor) ----------
+SKOR_ISARET = "skorDinamik"
+SKOR_ESKI_ENIYI = "const ad=f.filter(x=>!x.u&&pn(x)>=4.3).sort((a,b)=>(b.y||0)-(a.y||0)||pn(b)-pn(a)).slice(0,10);"
+SKOR_YENI_ENIYI = ("/*skorDinamik*/let mxY=0;f.forEach(x=>{if((x.y||0)>mxY)mxY=x.y||0;});const WB=Math.max(250,Math.round(mxY*0.05));"
+                   "const bs=x=>{const y=x.y||0;return y/(y+WB)*pn(x)+WB/(y+WB)*4};"
+                   "const ad=f.filter(x=>!x.u&&pn(x)>=4.3).sort((a,b)=>bs(b)-bs(a)).slice(0,10);")
+SKOR_ESKI_NOT = "<b>yorum sayısı en çok olandan başlayarak</b> sıralanır. Yani çok kişinin gidip beğendiği yerler öne çıkar; "
+SKOR_YENI_NOT = ("<b>puan ve yorum sayısı birlikte</b> değerlendirilerek sıralanır: çok yorumu olan yerlerin puanı olduğu gibi geçerli sayılır, "
+                 "az yorumlu yerlerin puanı ise ortalamaya doğru çekilir. Yani hem çok sevilen hem çok kişi tarafından onaylanan yerler öne çıkar; ")
+SKOR_ESKI_SK = ("const sk=x=>{if(x.u)return -1;const y=x.y||0,p=parseFloat(String(x.p).replace(',','.'))||0;"
+                "return y/(y+100)*p+100/(y+100)*4};")
+SKOR_YENI_SK = ("/*skorDinamik*/const WK={};I.forEach(x=>{const k=x.S||'';if((x.y||0)>(WK[k]||0))WK[k]=x.y||0;});"
+                "const sk=x=>{if(x.u)return -1;const y=x.y||0,p=parseFloat(String(x.p).replace(',','.'))||0,"
+                "W=Math.max(50,Math.round((WK[x.S||'']||0)*0.05));return y/(y+W)*p+W/(y+W)*4};")
+
+
+def skor_ayarla(h):
+    """En iyi 10: sahte yorum = rehberdeki en yüksek yorumun %5'i (en az 250). Kategori sıralaması: kategorinin kendi
+    en yüksek yorumunun %5'i (en az 50). Tekrar çalıştırılabilir."""
+    if SKOR_ISARET in h or "enIyiKutusu" not in h or "ozellikPaketi" not in h:
+        return h
+    for eski, _ in ((SKOR_ESKI_ENIYI, 0), (SKOR_ESKI_NOT, 0), (SKOR_ESKI_SK, 0)):
+        if h.count(eski) != 1:
+            return h
+    return (h.replace(SKOR_ESKI_ENIYI, SKOR_YENI_ENIYI, 1)
+             .replace(SKOR_ESKI_NOT, SKOR_YENI_NOT, 1)
+             .replace(SKOR_ESKI_SK, SKOR_YENI_SK, 1))
+
+
+# ---------- En iyi 10 notuna "detaylı açıklama" bağlantısı ----------
+PUAN_LINK_ESKI = "<b>Bu liste nasıl seçildi?</b>"
+PUAN_LINK_YENI = '<b>Bu liste nasıl seçildi?</b> (<a href="../puanlama.html" style="color:inherit;text-decoration:underline">detaylı açıklama</a>)'
+
+
+def puan_link_ekle(h):
+    if "puanlama.html" in h or h.count(PUAN_LINK_ESKI) != 1:
+        return h
+    return h.replace(PUAN_LINK_ESKI, PUAN_LINK_YENI, 1)
+
+
+# ---------- Mevcut sayfalarda "Balık & Deniz Ürünleri" kategorisi ----------
+def balik_ekle(h):
+    """Gömülü veride balık lokantalarını/balıkçıları yeni kategoriye taşır. Tekrar çalıştırılabilir."""
+    i = h.find("const V=")
+    if i < 0:
+        return h
+    i += len("const V=")
+    try:
+        veri, bitis = json.JSONDecoder().raw_decode(h[i:])
+    except Exception:
+        return h
+    yemek = veri.get("O", {}).get("Yemek")
+    if not yemek or "Türk & Aile Restoranı" not in yemek:
+        return h
+    degisti = False
+    for x in veri.get("I", []):
+        if x.get("A") == "Yemek" and x.get("S") != BALIK_ALT and balik_mi(x.get("n", ""), x.get("t", "")):
+            x["S"] = BALIK_ALT
+            degisti = True
+    if BALIK_ALT not in yemek and any(x.get("S") == BALIK_ALT for x in veri["I"]):
+        yemek.insert(yemek.index("Türk & Aile Restoranı") + 1, BALIK_ALT)
+        degisti = True
+    if not degisti:
+        return h
+    yeni = json.dumps(veri, ensure_ascii=False).replace("</", "<\\/")
+    return h[:i] + yeni + h[i + bitis:]
+
+
+# ---------- Aynı mekanın çift kaydı, En iyi kutusunda tür kotası, ilçeye göre ölçek ----------
+_KIMLIK_RE = re.compile(r"!1s(0x[0-9a-f]+:0x[0-9a-f]+)|!19s(ChIJ[\w-]+)")
+
+
+def _yer_kimligi(link):
+    m = _KIMLIK_RE.search(link or "")
+    return (m.group(1) or m.group(2)) if m else None
+
+
+def _tekrarsiz(kayitlar, yorum_anahtari, link_anahtari):
+    """Aynı Google mekan kimliğine sahip kayıtlardan yorumu en çok olanı tutar; sırayı korur."""
+    konum, cikti = {}, []
+    for r in kayitlar:
+        k = _yer_kimligi(r.get(link_anahtari, ""))
+        if k is None:
+            cikti.append(r)
+        elif k not in konum:
+            konum[k] = len(cikti)
+            cikti.append(r)
+        elif (r.get(yorum_anahtari) or 0) > (cikti[konum[k]].get(yorum_anahtari) or 0):
+            cikti[konum[k]] = r
+    return cikti
+
+
+def tekrar_temizle(h):
+    """Gömülü veride aynı mekan kimliğiyle tekrar eden kayıtları teke indirir. Tekrar çalıştırılabilir."""
+    i = h.find("const V=")
+    if i < 0:
+        return h
+    i += len("const V=")
+    try:
+        veri, bitis = json.JSONDecoder().raw_decode(h[i:])
+    except Exception:
+        return h
+    eski = veri.get("I", [])
+    yeni_liste = _tekrarsiz(eski, "y", "l")
+    if len(yeni_liste) == len(eski):
+        return h
+    veri["I"] = yeni_liste
+    return h[:i] + json.dumps(veri, ensure_ascii=False).replace("</", "<\\/") + h[i + bitis:]
+
+
+KOTA_ISARET = "kotaVar"
+KOTA_ESKI_ENIYI = ("const ad=f.filter(x=>!x.u&&pn(x)>=4.3).sort((a,b)=>bs(b)-bs(a))"
+                   ".slice(0,(ic.value===''&&/Tum-Ilceler/i.test(location.pathname))?20:10);")
+KOTA_YENI_ENIYI = ("/*kotaVar*/const NN=(ic.value===''&&/Tum-Ilceler/i.test(location.pathname))?20:10,CAP=NN>10?4:3,sc={},ad=[],ar=[];"
+                   "f.filter(x=>!x.u&&pn(x)>=4.3).sort((a,b)=>bs(b)-bs(a)||(b.y||0)-(a.y||0)).forEach(x=>{"
+                   "if(ad.length<NN&&(sc[x.S]||0)<CAP){sc[x.S]=(sc[x.S]||0)+1;ad.push(x);}else ar.push(x);});"
+                   "if(ad.length<NN){ar.slice(0,NN-ad.length).forEach(x=>ad.push(x));ad.sort((a,b)=>bs(b)-bs(a)||(b.y||0)-(a.y||0));}")
+KOTA_ESKI_NOT = "yerler listeye girmez. Veriler"
+KOTA_YENI_NOT = "yerler listeye girmez. Çeşitlilik için aynı türden en fazla 3 yer (il rehberlerinde 4) gösterilir. Veriler"
+KOTA_JS = r"""
+/*kotaVar*/
+function WKyenile(){
+  for(const k in WK)delete WK[k];
+  const il=ic.value;
+  I.forEach(x=>{if(il&&x.c!==il)return;const k=x.S||'';if((x.y||0)>(WK[k]||0))WK[k]=x.y||0;});
+}
+const _drawKapsam=draw;
+draw=function(){WKyenile();_drawKapsam();};
+"""
+
+
+def kota_ekle(h):
+    """En iyi kutusuna tür kotası (10'da 3, 20'de 4; boş kalırsa doldurulur), eşitlikte yorum sayısı,
+    kategori sıralamasında ilçe filtresine göre ölçek. Tekrar çalıştırılabilir."""
+    if KOTA_ISARET in h or "skorDinamik" not in h or "function draw(){" not in h:
+        return h
+    for eski in (KOTA_ESKI_ENIYI, KOTA_ESKI_NOT):
+        if h.count(eski) != 1:
+            return h
+    h = h.replace(KOTA_ESKI_ENIYI, KOTA_YENI_ENIYI, 1).replace(KOTA_ESKI_NOT, KOTA_YENI_NOT, 1)
+    return h.replace("function draw(){", KOTA_JS + "function draw(){", 1)
+
+
+# ---------- Paket 3: Türkçe karakter eşitlemeli arama, harita görünümü, Ne yesem?, WhatsApp, yemek dışı ayıklama ----------
+PAKET3_ISARET = "paket3Paketi"
+_YEMEK_DISI_TUR = re.compile(r"evcil hayvan|ayna dukkan|mutfak ekipman|ekipmanlari|produksiyon|isletme yonetimi|"
+                             r"danisman|egitim merkezi|parti planlay|organizasyon|toptanci")
+
+
+def yemek_disi_mi(tur):
+    """Google türü yemek dışı bir işletmeyi gösteriyorsa True (Kahve/Şarküteri/Mangal mağazası ELENMEZ)."""
+    return bool(_YEMEK_DISI_TUR.search(fold(tur or "")))
+
+
+def yemek_disi_temizle(h):
+    i = h.find("const V=")
+    if i < 0:
+        return h
+    i += len("const V=")
+    try:
+        veri, bitis = json.JSONDecoder().raw_decode(h[i:])
+    except Exception:
+        return h
+    eski = veri.get("I", [])
+    yeni = [x for x in eski if not yemek_disi_mi(x.get("t", ""))]
+    degisti = len(yeni) != len(eski)
+    for x in yeni:
+        for k in ("n", "t"):
+            v = x.get(k)
+            if v and _PUA.search(v):
+                x[k] = _PUA.sub("", v).strip()
+                degisti = True
+    if not degisti:
+        return h
+    veri["I"] = yeni
+    return h[:i] + json.dumps(veri, ensure_ascii=False).replace("</", "<\\/") + h[i + bitis:]
+
+
+PAKET3_TL_ESKI = "const tl=s=>String(s).toLocaleLowerCase('tr');"
+PAKET3_TL_YENI = ("const tl=s=>String(s).toLocaleLowerCase('tr').replace(/[çğıöşü]/g,c=>({'ç':'c','ğ':'g','ı':'i','ö':'o','ş':'s','ü':'u'}[c]));")
+
+PAKET3_HEAD = r"""<script>/*paket3Paketi*/try{var _m=/[?&]harita=(\d)/.exec(location.search);if(_m)localStorage.setItem('hv',_m[1]);document.documentElement.setAttribute('data-hv',_m?_m[1]:(localStorage.getItem('hv')||'1'))}catch(e){document.documentElement.setAttribute('data-hv','1')}</script>
+<style>/*paket3Paketi*/
+html[data-hv="1"] #map .leaflet-tile-pane{filter:saturate(.65) contrast(.95) brightness(1.03)}
+html[data-hv="2"] #map .leaflet-tile-pane{filter:grayscale(.6) brightness(1.04)}
+html[data-hv="3"] #map .leaflet-tile-pane{filter:sepia(.15) saturate(.7)}
+#map .leaflet-tile{outline:1px solid transparent}
+#map .marker-cluster-small,#map .marker-cluster-medium,#map .marker-cluster-large{background:rgba(37,99,235,.28)}
+#map .marker-cluster-small div,#map .marker-cluster-medium div,#map .marker-cluster-large div{background:rgba(37,99,235,.85);color:#fff;font-weight:700}
+#map .leaflet-bar{border:0;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+#map .leaflet-bar a{border-radius:10px;margin-bottom:4px;border:0}
+.nesec{margin:0 0 14px;padding:12px;background:var(--card);border:1px solid var(--accent);border-radius:14px}
+.nesec h4{margin:0 0 8px;font-size:13.5px}
+.nesec a.ny{display:block;padding:8px 0;border-top:1px solid var(--line);color:var(--text);text-decoration:none;font-size:14px;font-weight:600}
+.nesec small{display:block;color:var(--muted);font-weight:400}
+.nesec button{font:inherit;font-size:13px;font-weight:700;color:var(--accent);background:none;border:0;cursor:pointer;padding:6px 10px 0 0}
+@media (prefers-color-scheme:dark){
+html[data-hv="1"] #map .leaflet-tile-pane{filter:grayscale(.85) invert(.92) hue-rotate(185deg) brightness(.95) contrast(.9)}
+html[data-hv="2"] #map .leaflet-tile-pane{filter:invert(1) hue-rotate(200deg) saturate(.55) brightness(.8) contrast(.9)}
+html[data-hv="3"] #map .leaflet-tile-pane{filter:grayscale(1) invert(1) brightness(.75) contrast(1.05)}
+#map{background:#0f172a}
+#map .leaflet-bar a{background:#1e293b;color:#e2e8f0}
+#map .leaflet-bar a:hover{background:#334155}
+}
+</style>
+"""
+
+PAKET3_JS = r"""<script>/*paket3Paketi*/
+(function(){
+  const r=document.querySelector('button.reset');if(!r)return;
+  const w=r.parentNode;
+  const kutu=document.createElement('div');kutu.className='nesec';kutu.style.display='none';
+  const liste=document.getElementById('list');if(liste)liste.parentNode.insertBefore(kutu,liste);
+  function cek(){
+    const adaylar=I.filter(x=>ok(x)&&!x.u&&parseFloat(String(x.p).replace(',','.'))>=4.5&&(x.y||0)>=50);
+    for(let i=adaylar.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[adaylar[i],adaylar[j]]=[adaylar[j],adaylar[i]];}
+    const s=adaylar.slice(0,3);
+    kutu.style.display='block';
+    kutu.innerHTML='<h4>🎲 Bugün şunlara bak</h4>'+(s.length?s.map(x=>'<a class="ny" href="'+esc(x.l)+'" target="_blank" rel="noopener">'+esc(x.n)+'<small>'+esc(x.t||'')+' · ⭐ '+esc(x.p)+' · '+(x.y||0)+' yorum</small></a>').join(''):'<div style="font-size:13px;color:var(--muted)">Bu filtreyle 4,5+ puanlı ve 50+ yorumlu yer yok. Filtreleri gevşet.</div>')
+      +'<button id="nyTekrar">🔄 Başka öner</button><button id="nyKapat">✕ Kapat</button>';
+    document.getElementById('nyTekrar').onclick=cek;
+    document.getElementById('nyKapat').onclick=()=>{kutu.style.display='none'};
+  }
+  const b=document.createElement('button');b.className='reset';b.textContent='🎲 Ne yesem?';b.onclick=cek;
+  const wa=document.createElement('button');wa.className='reset';wa.textContent='💬 WhatsApp';
+  wa.onclick=()=>{try{hashYaz();}catch(e){}window.open('https://wa.me/?text='+encodeURIComponent(document.title+' '+location.href),'_blank');};
+  w.insertBefore(b,w.firstChild);w.insertBefore(wa,r);
+  w.style.flexWrap='wrap';
+})();
+</script>
+"""
+
+
+def paket3_ekle(h):
+    """Arama Türkçe karakter eşitleme, harita görünümü (?harita=1/2/3), Ne yesem?, WhatsApp, 'Veri tarihi'. Tekrar çalıştırılabilir."""
+    if PAKET3_ISARET in h or "</head>" not in h or "</body>" not in h or "const V=" not in h:
+        return h
+    if h.count(PAKET3_TL_ESKI) != 1:
+        return h
+    h = h.replace(PAKET3_TL_ESKI, PAKET3_TL_YENI, 1)
+    h = h.replace("</head>", PAKET3_HEAD + "</head>", 1)
+    h = re.sub(r'(<div class="sub-meta">)(\d\d\.\d\d\.\d{4} · )', r"\1Veri tarihi: \2", h, count=1)
+    k = h.rfind("</body>")
+    return h[:k] + PAKET3_JS + h[k:]
+
+
+# ---------- "Neler yenir?" popüler yerler sayfası (her il için, statik) ----------
+POPULER_KATEGORILER = ["Döner & Kebap", "Çiğ Köfte", "Pide & Lahmacun", "Türk & Aile Restoranı",
+                       "Balık & Deniz Ürünleri", "Kahvaltı", "Fırın & Tatlı", "Kafe & Kahve", "Fast food & Burger & Pizza"]
+POPULER_KISA = {"Döner & Kebap": "🥙 Kebap", "Çiğ Köfte": "🌯 Çiğ köfte", "Pide & Lahmacun": "🍕 Pide",
+                "Türk & Aile Restoranı": "🍲 Restoran", "Balık & Deniz Ürünleri": "🐟 Balık", "Kahvaltı": "🍳 Kahvaltı",
+                "Fırın & Tatlı": "🍯 Tatlı", "Kafe & Kahve": "☕ Kafe", "Fast food & Burger & Pizza": "🍔 Fast food"}
+POPULER_MIN_PUAN = 4.0
+_PUA = re.compile(r"[-]")
+_ULUSAL_ZINCIR = ("komagene", "mado", "burger king", "mcdonald", "starbucks", "kahve dunyasi", "tavuk dunyasi",
+                  "domino", "pizza hut", "popeyes", "little caesars", "kfc", "subway", "dunkin", "simit sarayi",
+                  "baydoner", "arbys", "carls jr", "sbarro", "gloria jeans", "caffe nero", "espresso lab", "usta donerci",
+                  "kofteci yusuf", "pizza pizza", "burger lab")
+_LEZZET = [("beyran", "Beyran"), ("paca", "Paça"), ("katmer", "Katmer"), ("kusleme", "Küşleme"), ("ciger", "Ciğer"),
+           ("kunefe", "Künefe"), ("baklava", "Baklava"), ("lahmacun", "Lahmacun"), ("kelle", "Kelle"),
+           ("iskembe", "İşkembe"), ("corba", "Çorba"), ("durum", "Dürüm"), ("simit", "Simit"), ("borek", "Börek"),
+           ("yuvalama", "Yuvalama"), ("ali nazik", "Ali Nazik"), ("kaburga", "Kaburga"), ("tantuni", "Tantuni"),
+           ("ic kofte", "İçli köfte"), ("sikma", "Sıkma"), ("manti", "Mantı"), ("pide", "Pide"), ("kahvalti", "Kahvaltı")]
+
+
+def _ek_de(ad):
+    """Yer eki: Gaziantep'te, Kilis'te, Hatay'da, İstanbul'da."""
+    l = (ad or "").replace("İ", "i").replace("I", "ı").lower()
+    unluler = "aıoueiöü"
+    son_unlu = next((c for c in reversed(l) if c in unluler), "e")
+    arka = son_unlu in "aıou"
+    son = l[-1:] or "e"
+    t = "t" if (son in "fstkçşhp" and son not in unluler) else "d"
+    return f"{ad}'{t}{'a' if arka else 'e'}"
+
+
+def _populer_anahtar(ad):
+    a = fold(ad or "")
+    for ayir in (" - ", "-", "(", " | ", ","):
+        a = a.split(ayir)[0]
+    return re.sub(r"\s+", " ", a).strip()
+
+
+_ZINCIR_RE = re.compile(r"(?<![a-z0-9])(" + "|".join(re.escape(z) for z in _ULUSAL_ZINCIR) + r")(?![a-z0-9])")
+
+
+def _zincir_mi(ad):
+    return bool(_ZINCIR_RE.search(fold(ad or "")))
+
+
+def populer_sayfa(h, dosya_adi, ad=None, ust=None):
+    """'Tüm İlçeler' rehber HTML'sinden 'Neler yenir?' sayfası üretir. Yeni tarama gerekmez. HTML metni ya da None döner."""
+    import html as _h
+    i = h.find("const V=")
+    if i < 0:
+        return None
+    try:
+        veri = json.JSONDecoder().raw_decode(h[i + 8:])[0]
+    except Exception:
+        return None
+    m = re.search(r"<title>([^<·–-]+)", h)
+    il = ad or (m.group(1).strip() if m else dosya_adi.replace("-Tum-Ilceler", "").replace("-", " "))
+    hepsi = []
+    for x in veri.get("I", []):
+        if x.get("S") not in POPULER_KATEGORILER or x.get("u") or not x.get("l"):
+            continue
+        try:
+            x["_p"] = float(str(x.get("p", "0")).replace(",", "."))
+        except ValueError:
+            continue
+        x["n"] = _PUA.sub("", x.get("n") or "").strip()
+        x["t"] = _PUA.sub("", x.get("t") or "").strip()
+        hepsi.append(x)
+    iyi40 = sum(1 for x in hepsi if x["_p"] >= POPULER_MIN_PUAN)
+    taban = POPULER_MIN_PUAN if iyi40 >= 12 else 3.8
+    kayit = [x for x in hepsi if x["_p"] >= taban]
+    dusuk = sorted([x for x in hepsi if x["_p"] < taban], key=lambda x: -(x.get("y") or 0))
+    if len(kayit) < 5:
+        return None
+    mx = max(x.get("y") or 1 for x in kayit)
+    esik = max(30, round(mx * 0.08))      # il eşiği: en çok yorumlunun %8'i (en az 30)
+    C = sum(x["_p"] for x in kayit) / len(kayit)
+    mm = max(20, min(250, round(mx * 0.05)))
+
+    def skor(x):                          # puan ağırlıklı logaritmik popülerlik
+        v = x.get("y") or 0
+        rb = (v * x["_p"] + mm * C) / (v + mm)
+        return rb * math.log(v + 10)
+
+    for x in hepsi:
+        x["_z"] = _zincir_mi(x["n"])
+    kayit.sort(key=lambda x: (x["_z"], -skor(x)))
+    e = lambda t: _h.escape(str(t or ""), quote=True)
+
+    def etiketler(x):
+        a = fold(f"{x['n']} {x['t']}")
+        bulunan = [ad for k, ad in _LEZZET if k in a][:3]
+        return "".join(f"<s>{e(t)}</s>" for t in bulunan)
+
+    def kart(x, sira):
+        y = x.get("y") or 0
+        gen = 100 if mx <= 100 else max(8, min(100, round(100 * math.log(max(y, 100) / 100) / math.log(mx / 100))))
+        rozet = " 💎" if x["_p"] >= 4.7 else ""
+        zin = "<s class=\"z\">Ulusal zincir</s>" if x["_z"] else ""
+        return (f'<a class="k" href="{e(x["l"])}" target="_blank" rel="noopener">'
+                f'<span class="no">{sira}</span><span class="g"><b>{e(x["n"])}</b>'
+                f'<small>{e(x.get("t"))}</small><span class="et">{zin}{etiketler(x)}</span><i style="width:{gen}%"></i></span>'
+                f'<span class="r"><em>⭐ {e(x["p"])}{rozet}</em><u>{y:,} yorum</u></span></a>').replace(",", ".")
+
+    nitelikli = sum(1 for x in kayit if (x.get("y") or 0) >= esik and not x["_z"])
+    boyut = 12 if nitelikli >= 40 else (8 if nitelikli >= 20 else 6)
+    efsane, sayac, marka = [], {}, {}
+    for x in sorted((x for x in kayit if not x["_z"]), key=lambda x: -skor(x)):
+        if len(efsane) >= boyut:
+            break
+        mk = _populer_anahtar(x.get("n"))
+        if sayac.get(x["S"], 0) >= 4 or marka.get(mk, 0) >= 2:
+            continue
+        sayac[x["S"]] = sayac.get(x["S"], 0) + 1
+        marka[mk] = marka.get(mk, 0) + 1
+        efsane.append(x)
+    devam = []
+    if boyut == 12:                       # büyük illerde 13-30 arası açılır liste (JavaScript'siz)
+        secildi = {id(x) for x in efsane}
+        sayac2, marka2 = dict(sayac), dict(marka)
+        for x in sorted((x for x in kayit if not x["_z"]), key=lambda x: -skor(x)):
+            if len(devam) >= 18:
+                break
+            mk = _populer_anahtar(x.get("n"))
+            if id(x) in secildi or sayac2.get(x["S"], 0) >= 8 or marka2.get(mk, 0) >= 2:
+                continue
+            sayac2[x["S"]] = sayac2.get(x["S"], 0) + 1
+            marka2[mk] = marka2.get(mk, 0) + 1
+            devam.append(x)
+    devam_html = ""
+    if len(devam) >= 3:
+        devam_html = (f'<details class="dev"><summary>▼ Devamını göster ({len(efsane) + 1}–{len(efsane) + len(devam)})</summary>'
+                      + "".join(kart(x, len(efsane) + n + 1) for n, x in enumerate(devam)) + "</details>")
+    bol = [("kacirma", "🔥 Kaçırma", f'<section id="kacirma"><h2>🔥 Şehrin klasikleri: en çok konuşulan {len(efsane)} mekan</h2>'
+            + "".join(kart(x, n + 1) for n, x in enumerate(efsane)) + devam_html + "</section>")]
+    for sn, kat in enumerate(POPULER_KATEGORILER):
+        tum = [x for x in kayit if x["S"] == kat]
+        if not tum:
+            continue
+        kmax = max(x.get("y") or 0 for x in tum)
+        ke = max(min(esik, round(kmax * 0.30)), min(100, esik))
+        ic = [x for x in tum if (x.get("y") or 0) >= ke][:20]
+        if len(ic) >= 2:
+            sid = f"k{sn}"
+            bol.append((sid, POPULER_KISA.get(kat, kat),
+                        f'<section id="{sid}"><h2>{e(kat)}</h2>' + "".join(kart(x, n + 1) for n, x in enumerate(ic)) + "</section>"))
+    dl = dusuk[:8]
+    tb = str(taban).replace(".", ",")
+    tek = "4,0'ın" if taban == 4.0 else "3,8'in"
+    if len(dl) >= 2:
+        bol.append(("dusuk", "⚠️ Puanı düşük",
+                    f'<section id="dusuk"><h2>⚠️ Çok popüler ama puanı {tek} altında</h2>'
+                    '<p class="not">Yorum sayısı yüksek, fakat memnuniyet puanı düşük kalan meşhur duraklar. Gitmeden önce güncel yorumlara göz atmanda fayda var.</p>'
+                    + "".join(kart(x, n + 1) for n, x in enumerate(dl)) + "</section>"))
+    tarih = time.strftime("%d.%m.%Y")
+    rehber = dosya_adi
+    ilde = _ek_de(il)
+    cipler = "".join(f'<a href="#{sid}">{e(ad)}</a>' for sid, ad, _ in bol)
+    govde = "".join(b for _, _, b in bol)
+    return f"""<!DOCTYPE html>
+<html lang="tr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>{e(ilde)} ne yenir, nerede yenir? · Local Radar</title>
+<meta name="description" content="{e(il)}'a ilk kez gelenler için Google Haritalar'da en çok değerlendirilen favori mekanlar.">
+<style>
+:root{{--bg:#fff8ef;--card:#fff;--text:#2b1d12;--muted:#7a6a5c;--line:#f0e1cf;--accent:#c2410c;--bar:#fdba74}}
+@media (prefers-color-scheme:dark){{:root{{--bg:#1a120c;--card:#261a12;--text:#f6eadc;--muted:#b9a592;--line:#3a2a1e;--accent:#fb923c;--bar:#9a4a16}}}}
+*{{box-sizing:border-box}}html{{scroll-behavior:smooth}}body{{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}}
+.w{{max-width:760px;margin:0 auto;padding:0 16px 40px}}
+header{{padding:20px 0 14px}}.geri{{display:inline-block;margin:0 6px 14px 0;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--text);text-decoration:none;font-size:13px;font-weight:600}}header small{{color:var(--accent);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:12px}}
+h1{{font-size:clamp(28px,7vw,44px);line-height:1.1;margin:6px 0 10px;font-weight:800}}
+header p{{margin:0;color:var(--muted);font-size:14.5px}}
+.cip{{display:flex;gap:8px;overflow-x:auto;padding:4px 0 12px;scrollbar-width:none}}.cip::-webkit-scrollbar{{display:none}}
+.cip a{{flex:none;padding:8px 13px;border-radius:999px;background:var(--card);border:1px solid var(--line);color:var(--text);text-decoration:none;font-size:13.5px;font-weight:600}}
+section{{scroll-margin-top:12px}}
+h2{{font-size:19px;margin:26px 0 10px;color:var(--accent)}}
+.k{{display:flex;gap:12px;align-items:center;padding:12px;margin-bottom:8px;background:var(--card);border:1px solid var(--line);border-radius:16px;color:inherit;text-decoration:none}}
+.k:hover{{border-color:var(--accent)}}
+.no{{flex:none;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;font-weight:800;display:grid;place-items:center;font-size:14px}}
+.g{{flex:1;min-width:0}}.g b{{display:block;font-size:15.5px;line-height:1.25}}
+.g small{{display:block;color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+.et{{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}}.et:empty{{display:none}}
+.et s{{text-decoration:none;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:rgba(194,65,12,.1);color:var(--accent)}}
+.et s.z{{background:rgba(120,120,120,.15);color:var(--muted)}}
+.g i{{display:block;height:5px;border-radius:3px;background:var(--bar);margin-top:7px}}
+.r{{flex:none;text-align:right}}.r em{{display:block;font-style:normal;font-weight:700;font-size:14px}}.r u{{text-decoration:none;color:var(--muted);font-size:12px}}
+.dev summary{{cursor:pointer;list-style:none;text-align:center;padding:12px;margin:4px 0 10px;font-weight:700;font-size:13.5px;color:var(--accent);background:rgba(194,65,12,.08);border:1px solid var(--accent);border-radius:14px}}
+.dev summary::-webkit-details-marker{{display:none}}
+.dev[open] summary{{display:none}}
+.not{{margin:-4px 0 10px;color:var(--muted);font-size:13px}}
+.alt{{margin-top:28px;padding:14px;border-radius:14px;background:var(--card);border:1px solid var(--line);font-size:13px;color:var(--muted)}}
+.alt a{{color:var(--accent);font-weight:700}}
+</style></head><body><div class="w">
+<header><a class="geri" href="../index.html">← Ana sayfa</a> <a class="geri" href="../rehberler/{e(rehber)}">← {e(il)} rehberi</a><br><small>Local Radar · {e(ust + " · " if ust else "")}Şehir lezzet rehberi</small><h1>{e(ilde)} ne yenir, nerede yenir?</h1>
+<p>{e(il)}'a ilk kez gelenler için Google Haritalar'da en çok değerlendirilen ve {tb} üzeri puan alan favori mekanlar. Sıralama yorum sayısı ağırlıklıdır, puanla dengelenir. Çubuklar yorum yoğunluğunu gösterir (logaritmik ölçek, kabaca kıyas içindir). 💎 = 4,7 ve üzeri puan. Güncelleme: {tarih}</p></header>
+<nav class="cip">{cipler}</nav>
+{govde}
+<div class="alt">Aynı markanın şubeleri, sana yakın olanı seçebilmen için ayrı listelenir (en üstte aynı markadan en fazla 2 şube). Ulusal zincirler listelerin sonuna alınır. İlçeye göre filtre ve harita için
+<a href="../rehberler/{e(rehber)}">{e(il)} rehberine</a> ya da <a href="../index.html">ana sayfaya</a> göz at.
+Veriler Google Haritalar'dan alınmıştır, yorum sayısı popülerliği gösterir; kalite için puana da bak.</div>
+</div></body></html>"""
+
+
+POPULER_LINK_ISARET = "populerLink"
+eski_js_ayni = """    const a=document.createElement('a');a.href=u;a.textContent='🍽 Neler yenir? Misafir rehberi →';
+    a.style.cssText='display:block;margin-top:10px;padding:10px 14px;border-radius:12px;background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent);font-weight:700;font-size:14px;text-decoration:none';"""
+yeni_js_ayni = """    const a=document.createElement('a');a.href=u;
+    a.innerHTML='<span style="font-size:26px">🍽</span><span style="flex:1;line-height:1.25"><b style="display:block;font-size:16px">Burada neler yenir?</b><span style="font-size:12.5px;opacity:.92">Şehrin en çok sevilen yerleri · Misafir rehberi</span></span><b style="font-size:20px">→</b>';
+    a.style.cssText='display:flex;align-items:center;gap:12px;margin:12px 0 4px;padding:14px 16px;border-radius:16px;background:linear-gradient(135deg,#ea580c,#f59e0b);color:#fff;text-decoration:none;box-shadow:0 6px 18px rgba(234,88,12,.35)';"""
+POPULER_LINK_JS = r"""<script>/*populerLink*/
+(function(){
+  const m=location.pathname.match(/\/([^\/]+?)(?:-Tum-Ilceler)?\.html$/i);if(!m||/^(index|harita|bolge|puanlama)$/i.test(m[1]))return;
+  const u='../populer/'+m[1]+'.html';
+  fetch(u,{method:'HEAD'}).then(r=>{
+    if(!r.ok)return;
+    const hedef=document.querySelector('.sub-meta');if(!hedef)return;
+    const a=document.createElement('a');a.href=u;
+    a.innerHTML='<span style="font-size:26px">🍽</span><span style="flex:1;line-height:1.25"><b style="display:block;font-size:16px">Burada neler yenir?</b><span style="font-size:12.5px;opacity:.92">Şehrin en çok sevilen yerleri · Misafir rehberi</span></span><b style="font-size:20px">→</b>';
+    a.style.cssText='display:flex;align-items:center;gap:12px;margin:12px 0 4px;padding:14px 16px;border-radius:16px;background:linear-gradient(135deg,#ea580c,#f59e0b);color:#fff;text-decoration:none;box-shadow:0 6px 18px rgba(234,88,12,.35)';
+    hedef.parentNode.insertBefore(a,hedef.nextSibling);
+  }).catch(()=>{});
+})();
+</script>
+"""
+
+
+POPULER_LINK2_ISARET = "Burada neler yenir?"
+
+
+def populer_link_yenile(h):
+    """Daha önce eklenmiş 'Neler yenir?' bağlantısını yeni (dikkat çekici) tasarımla değiştirir."""
+    if POPULER_LINK2_ISARET in h or eski_js_ayni not in h:
+        return h
+    return h.replace(eski_js_ayni, yeni_js_ayni, 1)
+
+
+_LINK_ESKI_SATIR = "const m=location.pathname.match(/\\/([^\\/]+)-Tum-Ilceler\\.html$/i);if(!m)return;"
+_LINK_YENI_SATIR = "const m=location.pathname.match(/\\/([^\\/]+?)(?:-Tum-Ilceler)?\\.html$/i);if(!m||/^(index|harita|bolge|puanlama)$/i.test(m[1]))return;"
+
+
+def populer_link_ilce(h):
+    """Daha önce eklenmiş bağlantı koduna ilçe rehberlerini de tanıtır (ilçenin 'Neler yenir?' sayfası varsa görünür)."""
+    if _LINK_ESKI_SATIR not in h:
+        return h
+    return h.replace(_LINK_ESKI_SATIR, _LINK_YENI_SATIR, 1)
+
+
+def populer_link_ekle(h):
+    """'Tüm İlçeler' rehberine 'Neler yenir?' sayfasına bağlantı ekler (sayfa varsa görünür). Tekrar çalıştırılabilir."""
+    if POPULER_LINK_ISARET in h or "</body>" not in h or "sub-meta" not in h:
+        return h
+    k = h.rfind("</body>")
+    return h[:k] + POPULER_LINK_JS + h[k:]
+
+
+HARITA_EK_ISARET = "harita456Paketi"
+HARITA_EK_CSS = """<style>/*harita456Paketi*/
+@media (prefers-color-scheme:dark){
+html[data-hv="4"] #map .leaflet-tile-pane{filter:saturate(.5) brightness(.7) contrast(1.05)}
+html[data-hv="5"] #map .leaflet-tile-pane{filter:grayscale(.7) invert(.9) hue-rotate(185deg) brightness(1.25) contrast(.85)}
+html[data-hv="6"] #map .leaflet-tile-pane{filter:saturate(.55) brightness(.92)}
+}
+</style>
+"""
+
+
+HARITA_NORMAL_ISARET = "haritaNormal"
+HARITA_ESKI_BETIK = ("try{var _m=/[?&]harita=(\\d)/.exec(location.search);if(_m)localStorage.setItem('hv',_m[1]);"
+                     "document.documentElement.setAttribute('data-hv',_m?_m[1]:(localStorage.getItem('hv')||'1'))}"
+                     "catch(e){document.documentElement.setAttribute('data-hv','1')}")
+HARITA_YENI_BETIK = ("try{var _m=/[?&]harita=(\\d)/.exec(location.search);"
+                     "document.documentElement.setAttribute('data-hv',_m?_m[1]:'0')}"
+                     "catch(e){document.documentElement.setAttribute('data-hv','0')}/*haritaNormal*/")
+HARITA_NORMAL_CSS = '<style>/*haritaNormal*/html[data-hv="0"] #map .leaflet-tile-pane{filter:none}</style>\n'
+
+
+def harita_normal(h):
+    """Harita koyu temada da normal (filtresiz) açılır. ?harita=1..6 ile eski görünümler denenebilir."""
+    if HARITA_NORMAL_ISARET in h or HARITA_ESKI_BETIK not in h:
+        return h
+    h = h.replace(HARITA_ESKI_BETIK, HARITA_YENI_BETIK, 1)
+    return h.replace("</head>", HARITA_NORMAL_CSS + "</head>", 1)
+
+
+def harita_ek(h):
+    """Koyu temada ek harita görünümleri: ?harita=4 (kısık açık harita), 5 (daha açık gri-mavi), 6 (gündüz haritası, yumuşak)."""
+    if HARITA_EK_ISARET in h or "paket3Paketi" not in h or "</head>" not in h:
+        return h
+    return h.replace("</head>", HARITA_EK_CSS + "</head>", 1)
+
+
+TUM_ENIYI_ISARET = "TumEnIyiYok"
+
+
+def tum_en_iyi_kaldir(h):
+    """'Tüm İlçeler' rehberlerinde En iyi kutusu gösterilmez (yerine 'Neler yenir?' sayfası var). İlçe rehberleri aynı kalır."""
+    if TUM_ENIYI_ISARET in h:
+        return h
+    m = re.search(r"if\(ana!==''\|\|arama[^\n;]*\)return '';", h)
+    if not m:
+        return h
+    return h[:m.end()] + "if(/Tum-Ilceler/i.test(location.pathname))return '';/*TumEnIyiYok*/" + h[m.end():]
+
+
+def en_iyi_min_yorum(h):
+    """'En iyi' kutusuna 1-3 yorumlu yerlerin girmesini engeller (en az 10 yorum)."""
+    return h.replace("!x.u&&pn(x)>=4.3)", "!x.u&&pn(x)>=4.3&&(x.y||0)>=10)")
+
+
+def sayfa_iyilestir(h):
+    """Rehber sayfasına bütün iyileştirmeleri uygular (hepsi tekrar çalıştırılabilir)."""
+    h = en_iyi_ekle(h)
+    h = adres_sade_ekle(h)
+    h = ozellik_ekle(h)
+    h = etiket_ekle(h)
+    h = paket2_ekle(h)
+    h = favori_kaldir(h)
+    h = skor_ayarla(h)
+    h = puan_link_ekle(h)
+    h = h.replace("const ONIZ_N=5;", "const ONIZ_N=7;")
+    h = h.replace("bs(b)-bs(a)).slice(0,10);", "bs(b)-bs(a)).slice(0,(ic.value===''&&/Tum-Ilceler/i.test(location.pathname))?20:10);")
+    h = kota_ekle(h)
+    h = balik_ekle(h)
+    h = yemek_disi_temizle(h)
+    h = paket3_ekle(h)
+    h = populer_link_ekle(h)
+    h = en_iyi_min_yorum(h)
+    h = harita_ek(h)
+    h = harita_normal(h)
+    h = tum_en_iyi_kaldir(h)
+    h = populer_link_yenile(h)
+    h = populer_link_ilce(h)
+    return tekrar_temizle(h)
+
+
+
 def html_yaz(kayitlar, ayar, yol, sade=False, yemek_sadece=False, alisveris_acik=True):
     ogeler = []
     kasap_var = False
-    for r in kayitlar:
+    balik_var = False
+    for r in _tekrarsiz(kayitlar, "Yorum Sayısı", "Harita Linki"):
         bolum = r["Bölüm"]
+        if ANA.get(bolum) == "Yemek" and yemek_disi_mi(r.get("Tür", "")):
+            continue
         alt = yemek_alt(r)
         if yemek_sadece:
             if alt is None:
@@ -1205,10 +2099,12 @@ def html_yaz(kayitlar, ayar, yol, sade=False, yemek_sadece=False, alisveris_acik
                 continue
             ana = ANA.get(bolum, "Diğer")
             sub = bolum if ana == "Yemek" else r["Grup"]
-            if alt == "Kasap":
-                ana, sub = "Yemek", "Kasap"
+            if alt in ("Kasap", BALIK_ALT):
+                ana, sub = "Yemek", alt
         if sub == "Kasap":
             kasap_var = True
+        if sub == BALIK_ALT:
+            balik_var = True
         ogeler.append({"n": r["Yer"], "p": str(r["Puan"]).replace(".", ","), "y": r["Yorum Sayısı"],
                        "u": 1 if r.get("_puansiz") else 0,
                        "s": r["Güvenilir Skor"],
@@ -1224,6 +2120,8 @@ def html_yaz(kayitlar, ayar, yol, sade=False, yemek_sadece=False, alisveris_acik
         O = {k: list(v) for k, v in ALT_SIRA.items()}
         if kasap_var:
             O["Yemek"].append("Kasap")
+        if balik_var:
+            O["Yemek"].append(BALIK_ALT)
     veri = {"O": O, "I": ogeler}
     alt = "Scan, discover, plan. Google Maps results filtered and organized by Local Radar."
     tarih = time.strftime("%d.%m.%Y")
@@ -1235,7 +2133,7 @@ def html_yaz(kayitlar, ayar, yol, sade=False, yemek_sadece=False, alisveris_acik
              .replace("__TARIH__", tarih))
 
     with open(yol, "w", encoding="utf-8") as f:
-        f.write(sayfa)
+        f.write(sayfa_iyilestir(sayfa))
 
 
 ENGEL_IPUCU = ("unusual traffic", "olağan dışı trafik", "robot olmadığınız",
@@ -1640,8 +2538,30 @@ def _json_oku(yol, varsayilan):
         return varsayilan
 
 
+def json_eskileri_tasi():
+    """Ana klasördeki eski raw_*.json ve scan_resume_*.json dosyalarını tarama_json klasörüne taşır.
+    Zaten orada aynı adlı dosya varsa dokunmaz. Kaç dosya taşındığını döndürür."""
+    import glob, shutil
+    n = 0
+    try:
+        for desen in ("raw_*.json", "scan_resume_*.json"):
+            for yol in glob.glob(desen):
+                if yol == DOSYA_HAM_HAVUZ:          # raw_pool.json havuz dosyası, taşınmaz
+                    continue
+                hedef = os.path.join(KLASOR_TARAMA_JSON, os.path.basename(yol))
+                if os.path.exists(hedef):
+                    continue
+                os.makedirs(KLASOR_TARAMA_JSON, exist_ok=True)
+                shutil.move(yol, hedef)
+                n += 1
+    except Exception:
+        pass
+    return n
+
+
 def _json_yaz(yol, veri):
     try:
+        os.makedirs(os.path.dirname(yol) or ".", exist_ok=True)
         with open(yol, "w", encoding="utf-8") as f:
             json.dump(veri, f, ensure_ascii=False)
     except Exception:
@@ -1688,6 +2608,7 @@ def tara(ayar, ilerleme=lambda i, n, m: print(f"[{i}/{n}] {m}"), durdur=lambda: 
          ekranda_goster=EKRANDA_GOSTER, devam=False):
     import threading, random, collections
     from playwright.sync_api import sync_playwright
+    json_eskileri_tasi()
     ara_yolu = f"{DOSYA_ARA_KAYIT_PREFIX}{ayar['dosya']}.json"
     tum, bitenler, verim = {}, set(), {}
     if devam and os.path.exists(ara_yolu):
@@ -2272,6 +3193,7 @@ def calistir(ayar, ilerleme=lambda i, n, m: print(f"[{i}/{n}] {m}"), durdur=lamb
         if not tum:
             return None
         try:
+            os.makedirs(os.path.dirname(ham_yolu) or ".", exist_ok=True)
             with open(ham_yolu, "w", encoding="utf-8") as f:
                 json.dump(list(tum.values()), f, ensure_ascii=False)
             LOG(f"Raw data saved: {ham_yolu} (you can re-process without scanning)")

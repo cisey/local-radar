@@ -1071,6 +1071,7 @@ class Pencere:
             slug_ham = g.fold(isim_havuzu).replace(" ", "_")
             slug = re.sub(r"[^a-zA-Z0-9_]+", "", slug_ham).title()
 
+            g.json_eskileri_tasi()
             ham_yolu = f"{g.DOSYA_HAM_PREFIX}{slug}.json"
             ham_kullan = None
             if v["ham"]:
