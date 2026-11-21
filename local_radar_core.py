@@ -1049,7 +1049,7 @@ a.nm-link::after{content:'';position:absolute;inset:0}
 <div id="map"></div>
 <div id="list"></div>
 
-<p class="foot">📡 Local Radar · Google Maps verileri · Harita: © OpenStreetMap</p>
+<p class="foot">📡 Local Radar · Google Maps verileri · Harita: © OpenStreetMap · İlçe sınırları: geoBoundaries (CC BY 4.0)</p>
 </div>
 
 <script>
@@ -2054,6 +2054,14 @@ def en_iyi_min_yorum(h):
     return h.replace("!x.u&&pn(x)>=4.3)", "!x.u&&pn(x)>=4.3&&(x.y||0)>=10)")
 
 
+def kaynak_notu_ekle(h):
+    """Sayfa altındaki kaynak notuna ilçe sınırı verisinin (geoBoundaries, CC BY 4.0) adını ekler. Tekrar çalıştırılabilir."""
+    if "geoBoundaries" in h:
+        return h
+    return h.replace("Harita: © OpenStreetMap</p>",
+                     "Harita: © OpenStreetMap · İlçe sınırları: geoBoundaries (CC BY 4.0)</p>")
+
+
 def sayfa_iyilestir(h):
     """Rehber sayfasına bütün iyileştirmeleri uygular (hepsi tekrar çalıştırılabilir)."""
     h = en_iyi_ekle(h)
@@ -2072,6 +2080,7 @@ def sayfa_iyilestir(h):
     h = paket3_ekle(h)
     h = populer_link_ekle(h)
     h = en_iyi_min_yorum(h)
+    h = kaynak_notu_ekle(h)
     h = harita_ek(h)
     h = harita_normal(h)
     h = tum_en_iyi_kaldir(h)
