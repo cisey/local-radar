@@ -33,6 +33,7 @@ BITIS_SAATI = None                   # None = sınırsız çalışır. Sabah dur
 EKRANDA_GOSTER = True                # tarayıcı penceresi açık çalışsın (Google engelini azaltır)
 MIN_YARICAP_KM = 2.0                 # çok küçük ilçelerde en az bu yarıçap
 PARALEL_SAYISI = 1                   # Aynı anda kaç tarayıcı penceresi çalışsın (1 = tek pencere, 2 = iki kat hızlı, 3 = daha riskli)
+GERCEK_ILCE_ATA = True               # il rehberlerinde ilçeyi koordinattan bul (ayarlar.json: gercek_ilce_ata)
 TEKRAR_ONLEME_GUN = 60               # Bu kadar gün içinde taranmış arama karelerini tekrar arama (0 = kapalı)
 ENGEL_BEKLEME_DAKIKA = [30, 60]      # Google engellerse bu kadar bekleyip devam eder
 GITHUB_DEPO = ""                                           # sitenin deposu; ayarlar.json içinden gelir
@@ -106,12 +107,14 @@ _AYAR_VARSAYILAN = {
     "bitis_saati": None,
     "ekranda_goster": True,
     "paralel_sayisi": 1,
+    "gercek_ilce_ata": True,       # il rehberlerinde mekanın ilçesini koordinattan bul (shapely gerekir)
+    "tekrar_onleme_gun": 60,      # 0 yaparsan daha önce taranmış kareler de yeniden taranır
 }
 
 
 def _ayarlari_yukle():
     global GITHUB_DEPO, DEPO_ALT_KLASOR, SITE_ADRESI, GA_KODU, VARSAYILAN_IL
-    global BITIS_SAATI, EKRANDA_GOSTER, PARALEL_SAYISI, DEPO_KLASORU
+    global BITIS_SAATI, EKRANDA_GOSTER, PARALEL_SAYISI, DEPO_KLASORU, TEKRAR_ONLEME_GUN, GERCEK_ILCE_ATA
     if not os.path.exists(AYAR_DOSYASI):
         try:
             with open(AYAR_DOSYASI, "w", encoding="utf-8") as f:
@@ -134,6 +137,8 @@ def _ayarlari_yukle():
     BITIS_SAATI = d.get("bitis_saati", BITIS_SAATI)
     EKRANDA_GOSTER = d.get("ekranda_goster", EKRANDA_GOSTER)
     PARALEL_SAYISI = d.get("paralel_sayisi", PARALEL_SAYISI)
+    TEKRAR_ONLEME_GUN = d.get("tekrar_onleme_gun", TEKRAR_ONLEME_GUN)
+    GERCEK_ILCE_ATA = bool(d.get("gercek_ilce_ata", True))
     if GITHUB_DEPO:
         ad = GITHUB_DEPO.rstrip("/").split("/")[-1]
         ad = ad[:-4] if ad.endswith(".git") else ad
@@ -483,6 +488,69 @@ def tarama_klasorleri():
     return sonuc
 
 
+# ---------- Gerçek ilçe ataması (koordinat + ilçe sınırları) ----------
+_ATAYICI = {"nesne": None, "denendi": False}
+_SATIR_ONBELLEK = {}           # slug -> ilçe taramasının satırları (bellekte)
+_CAPRAZ = {"hazir": False, "il_ekstra": {}, "havuz": {}}
+
+
+def _atayici():
+    if not GERCEK_ILCE_ATA:
+        return None
+    if not _ATAYICI["denendi"]:
+        _ATAYICI["denendi"] = True
+        try:
+            import ilce_ata
+            _ATAYICI["nesne"] = ilce_ata.Atayici(IL_ILCE)
+        except Exception as e:
+            print(f"   Gerçek ilçe ataması kapalı ({e}). 'pip install shapely' gerekebilir; eski yöntemle devam ediliyor.")
+    return _ATAYICI["nesne"]
+
+
+def _satirlar_oku(slug, yol):
+    if slug not in _SATIR_ONBELLEK:
+        rows = json.load(open(yol, encoding="utf-8"))
+        for r in rows:
+            if r.get("_puansiz"):
+                r["Puan"], r["Yorum Sayısı"], r["Güvenilir Skor"] = 0.0, 0, 0.0
+        _SATIR_ONBELLEK[slug] = rows
+    return _SATIR_ONBELLEK[slug]
+
+
+def _capraz_hazirla():
+    """Bütün ilçe taramalarındaki mekanların gerçek ilini bulur; başka ile ait olanları o ilin listesine koyar."""
+    if _CAPRAZ["hazir"]:
+        return
+    _CAPRAZ["hazir"] = True
+    at = _atayici()
+    if not at:
+        return
+    print("   Gerçek ilçe ataması hazırlanıyor (ilk seferde birkaç dakika sürebilir)...")
+    import ilce_ata
+    ekstra, havuz = {}, {}
+    for slug, yol in tarama_klasorleri().items():
+        kaynak_il = il_bul(slug)
+        if not kaynak_il:
+            continue
+        for r in _satirlar_oku(slug, yol):
+            v = at.ata(r)
+            if not v:
+                continue
+            il2, ilce2, kat = v
+            r["_gil"], r["_gilce"], r["_gkat"] = il2, ilce2, kat
+            if kat != "uzak":                              # ilçe rehberleri için: (il, ilçe) -> mekanlar
+                kayit = havuz.setdefault((_nrm(il2), ilce_ata.ilce_anahtar(il2, ilce2)), {})
+                yid = ilce_ata._yer_id(r.get("Harita Linki")) or id(r)
+                eski = kayit.get(yid)
+                if eski is None or (r.get("Yorum Sayısı") or 0) > (eski.get("Yorum Sayısı") or 0):
+                    kayit[yid] = r
+            if kat != "uzak" and _nrm(il2) != _nrm(kaynak_il):
+                ekstra.setdefault(_nrm(il2), []).append(r)
+    at.kaydet()
+    _CAPRAZ["il_ekstra"] = ekstra
+    _CAPRAZ["havuz"] = havuz
+
+
 def il_birlestir(il):
     """İlin tüm ilçe taramalarını tek rehberde toplar, aynı mekanı bir kez yazar.
     En az 2 ilçe yoksa None. Başarılıysa (slug, html_yolu, yer_sayisi) döner."""
@@ -491,18 +559,33 @@ def il_birlestir(il):
     if len(paylar) < 2:
         return None
 
+    _capraz_hazirla()
+    gercek = bool(_atayici())
     satirlar, merkezler = {}, {}
     for slug, yol in paylar.items():
-        rows = json.load(open(yol, encoding="utf-8"))
-        for r in rows:
-            if r.get("_puansiz"):                        # kayıtta boş saklanıyor, rehber için sayıya çevir
-                r["Puan"], r["Yorum Sayısı"], r["Güvenilir Skor"] = 0.0, 0, 0.0
+        rows = list(_satirlar_oku(slug, yol))
+        if gercek:                                       # gerçek ile göre süz, ilçe adını düzelt
+            temiz = []
+            for r in rows:
+                if "_gil" in r:
+                    if r["_gkat"] == "uzak" or _nrm(r["_gil"]) != n_il:
+                        continue                         # yurt dışı/bozuk ya da başka ile ait
+                    r = dict(r, **{"İlçe": r["_gilce"]})
+                temiz.append(r)
+            rows = temiz
         satirlar[slug] = rows
         nok = [(r["Enlem"], r["Boylam"]) for r in rows
                if isinstance(r.get("Enlem"), (int, float)) and isinstance(r.get("Boylam"), (int, float))]
         merkezler[slug] = (sum(a for a, _ in nok) / len(nok), sum(b for _, b in nok) / len(nok)) if nok else None
 
+    if gercek:                                           # başka illerin taramalarında bulunan bu ile ait mekanlar
+        ek = [dict(r, **{"İlçe": r["_gilce"]}) for r in _CAPRAZ["il_ekstra"].get(n_il, [])]
+        if ek:
+            satirlar["_ekstra"] = ek
+
     def uzaklik(slug, r):
+        if slug == "_ekstra":
+            return 1e9                                   # aynı mekan zaten varsa onun kaydı kalsın
         m = merkezler.get(slug)
         if not m or not isinstance(r.get("Enlem"), (int, float)):
             return 0.0
@@ -533,6 +616,90 @@ def il_birlestir(il):
     yol_b = os.path.join(klasor, slug_b + ".html")
     g.html_yaz(kayitlar, {"baslik": f"{il} · Tüm İlçeler"}, yol_b, yemek_sadece=True, alisveris_acik=False)
     return slug_b, yol_b, len(kayitlar)
+
+
+def ilce_rehberlerini_duzelt():
+    """Menü 9: her ilçe rehberini, gerçekten o ilçede olan mekanlarla yeniden kurar (koordinat + ilçe sınırı)."""
+    if not depo_hazirla():
+        print("Depo hazırlanamadı.")
+        return
+    if not _atayici():
+        print("Gerçek ilçe ataması kullanılamıyor (shapely yüklü mü? 'pip install shapely').")
+        return
+    import ilce_ata
+    git(["pull", "--rebase", "--autostash"], cwd=DEPO_KLASORU)
+    _capraz_hazirla()
+    klasor = os.path.join(DEPO_KLASORU, DEPO_ALT_KLASOR) if DEPO_ALT_KLASOR else DEPO_KLASORU
+    hedef_klasor = os.path.join(g.KLASOR_CIKTILAR, "duzeltilmis")
+    os.makedirs(hedef_klasor, exist_ok=True)
+    harita = _ilce_dosya_haritasi(merkez=True)
+    uretilen, atlanan, satirlar = {}, [], []
+    for ad in sorted(os.listdir(klasor)):
+        if not ad.endswith(".html") or ad.endswith("-Tum-Ilceler.html") or ad not in harita:
+            continue
+        il, ilce = harita[ad]
+        anahtar = (_nrm(il), ilce_ata.ilce_anahtar(il, ilce))
+        rows = [dict(r, **{"İlçe": r["_gilce"]}) for r in _CAPRAZ["havuz"].get(anahtar, {}).values()]
+        try:
+            eski = open(os.path.join(klasor, ad), encoding="utf-8").read()
+            V = json.JSONDecoder().raw_decode(eski[eski.index("const V=") + 8:])[0]
+            eski_say = len(V.get("I", []))
+            kategoriler = list(V.get("O", {}).keys())
+            bm = re.search(r"<title>(.*?)</title>", eski)
+            baslik = bm.group(1) if bm else f"{ilce} · Local Radar"
+        except Exception:
+            satirlar.append(f"{ad}: eski dosya okunamadı, atlandı")
+            continue
+        if not rows:
+            atlanan.append(ad)
+            satirlar.append(f"{ad}: {eski_say} -> 0  (bu ilçede mekan bulunamadı, DOKUNULMADI)")
+            continue
+        yol = os.path.join(hedef_klasor, ad)
+        g.html_yaz(rows, {"baslik": baslik}, yol, yemek_sadece=(kategoriler == ["Yemek"]),
+                   alisveris_acik=("Alışveriş" in kategoriler))
+        try:
+            h = open(yol, encoding="utf-8").read()
+            yeni_say = len(json.JSONDecoder().raw_decode(h[h.index("const V=") + 8:])[0].get("I", []))
+        except Exception:
+            yeni_say = len(rows)
+        if yeni_say < 20 and eski_say >= 20:               # içi boşalacak rehberi bozma; elle bakılsın / yeniden taransın
+            atlanan.append(ad)
+            satirlar.append(f"{ad}: {eski_say} -> {yeni_say}  (DOKUNULMADI: gerçek ilçesinde 20'den az mekan var, yeniden taranmalı)")
+            continue
+        uretilen[ad] = yol
+        satirlar.append(f"{ad}: {eski_say} -> {yeni_say}" + ("   (20'nin altında)" if yeni_say < 20 else ""))
+    rapor_yolu = os.path.join(KLASOR, "ilce_duzeltme_raporu.txt")
+    with open(rapor_yolu, "w", encoding="utf-8") as f:
+        f.write("İlçe rehberi düzeltme önizlemesi (eski mekan sayısı -> yeni)\n\n" + "\n".join(satirlar))
+    print(f"\n{len(uretilen)} ilçe rehberi yeniden kuruldu, {len(atlanan)} tanesine dokunulmadı.")
+    print(f"Önizleme dosyaları: {hedef_klasor}   (tarayıcıda açıp bakabilirsin)")
+    print(f"Eski -> yeni sayılar: {rapor_yolu}")
+    if not uretilen:
+        return
+    if input("\nBunlar GitHub'a yüklensin mi? (e/h): ").strip().lower() not in ("e", "evet"):
+        print("Yüklenmedi. Beğenmezsen hiçbir şey değişmedi.")
+        return
+    git(["pull", "--rebase", "--autostash"], cwd=DEPO_KLASORU)
+    for ad, yol in uretilen.items():
+        h = g.sayfa_iyilestir(open(yol, encoding="utf-8").read())
+        if GA_KODU and GA_KODU not in h:
+            et = ('<script async src="https://www.googletagmanager.com/gtag/js?id=' + GA_KODU + '"></script>'
+                  '<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}'
+                  "gtag('js',new Date());gtag('config','" + GA_KODU + "');</script>")
+            h = h.replace("<head>", "<head>" + et, 1) if "<head>" in h else et + h
+        with open(os.path.join(klasor, ad), "w", encoding="utf-8") as f:
+            f.write(h)
+    git(["add", "-A"], cwd=DEPO_KLASORU)
+    git(["-c", "user.name=Local Radar", "-c", "user.email=local-radar@users.noreply.github.com",
+         "commit", "-m", "İlçe rehberleri gerçek ilçe sınırlarına göre yeniden kuruldu"], cwd=DEPO_KLASORU)
+    rc, out = git(["push"], cwd=DEPO_KLASORU, zaman=900)
+    if rc != 0:
+        git(["pull", "--rebase", "--autostash"], cwd=DEPO_KLASORU)
+        rc, out = git(["push"], cwd=DEPO_KLASORU, zaman=900)
+    print("GitHub'a yüklendi." if rc == 0 else f"Yüklenemedi: {out[:300]}")
+    if rc == 0:
+        print("\n'Neler yenir?' sayfaları yenileniyor...")
+        populer_sayfalar_uret()
 
 
 def il_birlestir_ve_yukle(il, durum):
@@ -695,13 +862,16 @@ def _populer_ilce_uygun(h, ad):
     return n >= POPULER_ILCE_MIN_POPULER
 
 
-def _ilce_dosya_haritasi():
-    """Dosya adı -> (il, ilçe). Hem yeni hem eski adlandırmayı tanır."""
+def _ilce_dosya_haritasi(merkez=False):
+    """Dosya adı -> (il, ilçe). Hem yeni hem eski adlandırmayı tanır.
+    merkez=True: il adıyla duran merkez ilçe rehberlerini de (Isparta.html -> Isparta/Merkez) tanır."""
     harita = {}
     for il, ilceler in IL_ILCE.items():
         for ilce in ilceler:
             harita[slug_yap(ilce, il) + ".html"] = (il, ilce)
             harita.setdefault(eski_slug(ilce, il) + ".html", (il, ilce))
+        if merkez and "Merkez" in ilceler:
+            harita.setdefault(_temiz(il) + ".html", (il, "Merkez"))
     return harita
 
 
@@ -794,7 +964,17 @@ def alan_hesapla(il, ilce, km=None):
         s = g.yer_bul(f"{ilce}, {il}", f"{ilce} ilçesi, {il}")
         if s:
             e, b, r = s
-            return e, b, (km or max(r, MIN_YARICAP_KM))
+            r = km or max(r, MIN_YARICAP_KM)
+            try:                                           # bulunan nokta ilçenin dışındaysa sınırdan düzelt
+                at = _atayici()
+                a2 = at.alan(il, ilce) if at else None
+                if a2 and not at.icinde_mi(a2[3], e, b):
+                    log(f"   UYARI: Haritadan bulunan nokta {ilce} sınırının dışında; ilçe sınırından merkez alınıyor.")
+                    e, b = a2[0], a2[1]
+                    r = km or min(25.0, max(MIN_YARICAP_KM, a2[2]))
+            except Exception:
+                pass
+            return e, b, r
         time.sleep(10)
     return None
 
@@ -1024,8 +1204,6 @@ def kurulum_menusu():
         telegram_testi()
     elif sec == "3":
         telegram_chat_id_bul()
-    if sec in ("1", "2", "3"):
-        input("\nKapatmak için Enter'a bas...")
 
 
 def ilce_ata_raporu():
@@ -1041,61 +1219,77 @@ def ilce_ata_raporu():
     git(["pull", "--rebase", "--autostash"], cwd=DEPO_KLASORU)
     klasor = os.path.join(DEPO_KLASORU, DEPO_ALT_KLASOR) if DEPO_ALT_KLASOR else DEPO_KLASORU
     try:
-        ilce_ata.rapor(klasor, IL_ILCE, _ilce_dosya_haritasi(), cikti_klasoru=KLASOR)
+        ilce_ata.rapor(klasor, IL_ILCE, _ilce_dosya_haritasi(merkez=True), cikti_klasoru=KLASOR)
     except ImportError:
         print("Bir paket eksik. Komut satırına şunu yaz:  pip install shapely")
     except Exception:
         print("Rapor hatası:\n" + traceback.format_exc())
 
 
+def _menu_goster():
+    print("\nLocal Radar · Gece Taraması\n")
+    print("  1 = Gece taramasını başlat")
+    print("  2 = TÜM güncellemeleri yap (Tüm İlçeler rehberleri → rehber sayfaları → Neler yenir?) ve Telegram'a haber ver")
+    print("  3 = Sadece 'Tüm İlçeler' birleşik rehberlerini oluştur")
+    print("  4 = Sadece mevcut rehber sayfalarını güncelle")
+    print("  5 = Sadece 'Neler yenir?' sayfalarını üret (iller + büyük ilçeler)")
+    print("  6 = Eksik illeri listele (Tüm İlçeler rehberi olmayan iller)")
+    print("  7 = Kurulum ve testler (GitHub giriş, Telegram)")
+    print("  8 = İlçe ataması RAPORU (sınır verisini indirir, rehberlere HİÇBİR ŞEY yazmaz)")
+    print("  9 = İlçe rehberlerini gerçek ilçelerine göre YENİDEN KUR (önce önizleme, sonra yükleme sorar)")
+    print("  0 = Çıkış\n")
+
+
+def _gece_calistir_guvenli():
+    try:
+        gece_calistir()
+    except KeyboardInterrupt:
+        log("Kullanıcı durdurdu.")
+    except Exception:
+        log("BEKLENMEYEN HATA:\n" + traceback.format_exc())
+
+
 def main():
+    # Kısayol/zamanlanmış görev parametreleri: tek seferlik çalışır
     if "--baslat" in sys.argv:
-        secim = "1"
-    elif "--giris" in sys.argv:
-        secim = "7g"
-    else:
-        print("Local Radar · Gece Taraması\n")
-        print("  1 = Gece taramasını başlat")
-        print("  2 = TÜM güncellemeleri yap (Tüm İlçeler rehberleri → rehber sayfaları → Neler yenir?) ve Telegram'a haber ver")
-        print("  3 = Sadece 'Tüm İlçeler' birleşik rehberlerini oluştur")
-        print("  4 = Sadece mevcut rehber sayfalarını güncelle")
-        print("  5 = Sadece 'Neler yenir?' sayfalarını üret (iller + büyük ilçeler)")
-        print("  6 = Eksik illeri listele (Tüm İlçeler rehberi olmayan iller)")
-        print("  7 = Kurulum ve testler (GitHub giriş, Telegram)")
-        print("  8 = İlçe ataması RAPORU (sınır verisini indirir, rehberlere HİÇBİR ŞEY yazmaz)\n")
-        secim = input("Seçim (1-8): ").strip()
-    if secim == "7g":
+        _gece_calistir_guvenli()
+        return
+    if "--giris" in sys.argv:
         github_giris_testi()
         input("\nKapatmak için Enter'a bas...")
-    elif secim == "7":
-        kurulum_menusu()
-    elif secim == "8":
-        ilce_ata_raporu()
-        input("\nKapatmak için Enter'a bas...")
-    elif secim == "6":
-        eksik_illeri_listele()
-        input("\nKapatmak için Enter'a bas...")
-    elif secim == "5":
-        populer_sayfalar_uret()
-        input("\nKapatmak için Enter'a bas...")
-    elif secim == "4":
-        en_iyi_ekle_hepsine()
-        input("\nKapatmak için Enter'a bas...")
-    elif secim == "3":
-        tum_illeri_birlestir()
-        input("\nKapatmak için Enter'a bas...")
-    elif secim == "2":
-        hepsini_sirayla()
-        input("\nKapatmak için Enter'a bas...")
-    else:
+        return
+    # Normal kullanım: iş bitince menüye döner, 0 ile çıkılır
+    while True:
+        _menu_goster()
+        secim = input("Seçim (0-9): ").strip()
         try:
-            gece_calistir()
+            if secim == "0":
+                return
+            elif secim == "7":
+                kurulum_menusu()
+            elif secim == "8":
+                ilce_ata_raporu()
+            elif secim == "9":
+                ilce_rehberlerini_duzelt()
+            elif secim == "6":
+                eksik_illeri_listele()
+            elif secim == "5":
+                populer_sayfalar_uret()
+            elif secim == "4":
+                en_iyi_ekle_hepsine()
+            elif secim == "3":
+                tum_illeri_birlestir()
+            elif secim == "2":
+                hepsini_sirayla()
+            elif secim == "1":
+                _gece_calistir_guvenli()
+            else:
+                print("Geçersiz seçim, 0-9 arası bir sayı yaz.")
         except KeyboardInterrupt:
-            log("Kullanıcı durdurdu.")
+            print("\nDurduruldu.")
         except Exception:
-            log("BEKLENMEYEN HATA:\n" + traceback.format_exc())
-        if "--baslat" not in sys.argv:
-            input("\nKapatmak için Enter'a bas...")
+            print("HATA:\n" + traceback.format_exc())
+        print("\n" + "-" * 50)
 
 
 if __name__ == "__main__":

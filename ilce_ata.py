@@ -104,6 +104,75 @@ def rehber_oku(yol):
         return None
 
 
+ONBELLEK_DOSYASI = os.path.join(KLASOR, "ilce_atama_onbellek.json")
+
+
+class Atayici:
+    """Bir mekan satırına (Enlem/Boylam/Harita Linki) gerçek il ve ilçeyi atar.
+    Sonuçlar ilce_atama_onbellek.json içinde saklanır; ikinci çalıştırma çok hızlı olur."""
+
+    def __init__(self, il_ilce):
+        indir()
+        self.liste, self.ag = sinirlari_yukle()
+        self.site = {}                                   # ilçe anahtarı -> (il, ilçe) bizim adlarımızla
+        self.il_adi = {}                                 # fold(il) -> bizim il adımız
+        for il, ilceler in il_ilce.items():
+            self.il_adi[fold(il)] = il
+            for ilce in ilceler:
+                self.site[ilce_anahtar(il, ilce)] = (il, ilce)
+        self.onbellek = {}
+        try:
+            self.onbellek = json.load(open(ONBELLEK_DOSYASI, encoding="utf-8"))
+        except Exception:
+            pass
+        self.yeni = 0
+
+    def ata(self, r):
+        """-> (il, ilçe, kategori)  kategori: ic / yakin / orta / uzak.  Koordinat yoksa None."""
+        lat, lon = r.get("Enlem"), r.get("Boylam")
+        if not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
+            return None
+        yid = _yer_id(r.get("Harita Linki"))
+        anahtar = yid or f"{lat:.5f},{lon:.5f}"
+        v = self.onbellek.get(anahtar)
+        if v:
+            return tuple(v)
+        il, ilce, mesafe = yer_bul(self.liste, self.ag, lat, lon)
+        kat = "ic" if mesafe == 0 else "yakin" if mesafe <= ESIK_YAKIN_M else "orta" if mesafe <= ESIK_UZAK_M else "uzak"
+        k = ilce_anahtar(il, ilce)
+        site_il, site_ilce = self.site.get(k, (self.il_adi.get(fold(il), il), ilce))
+        v = (site_il, site_ilce, kat)
+        self.onbellek[anahtar] = list(v)
+        self.yeni += 1
+        return v
+
+    def alan(self, il, ilce):
+        """İlçe sınırından tarama alanı: (enlem, boylam, yarıçap_km, geom). Bulunamazsa None."""
+        k = ilce_anahtar(il, ilce)
+        for il2, ad2, geom in self.liste:
+            if fold(il2) == fold(il) and ilce_anahtar(il2, ad2) == k:
+                p = geom.representative_point()
+                lon = p.x / (111320.0 * math.cos(math.radians(39)))
+                lat = p.y / 110574.0
+                r = math.sqrt(geom.area / math.pi) / 1000.0
+                return lat, lon, r, geom
+        return None
+
+    def icinde_mi(self, geom, lat, lon):
+        from shapely.geometry import Point
+        return geom.contains(Point(*_xy(lon, lat)))
+
+    def kaydet(self):
+        if not self.yeni:
+            return
+        try:
+            with open(ONBELLEK_DOSYASI, "w", encoding="utf-8") as f:
+                json.dump(self.onbellek, f, ensure_ascii=False)
+            self.yeni = 0
+        except Exception:
+            pass
+
+
 def rapor(rehber_klasoru, il_ilce, dosya_haritasi, cikti_klasoru=None):
     cikti_klasoru = cikti_klasoru or KLASOR
     indir()
