@@ -82,11 +82,33 @@ python gece_tarama.py
 | Key | Action |
 |-----|--------|
 | 1 | Start the night scan |
-| 2 | GitHub login test (first setup only) |
-| 3 | Telegram test message |
-| 4 | Find your Telegram chat id automatically |
-| 5 | Build every province's merged guide now and upload it |
-| 6 | Add the Analytics code to all existing guides and upload |
+| 2 | Run all updates (merged guides, "What to eat?" pages) and upload |
+| 3 | Build every province's merged **"All Districts"** guide and upload |
+| 4 | Refresh the look/features of all existing guide pages and upload |
+| 5 | Rebuild the **"What to eat?"** (`populer/`) pages and upload |
+| 6 | List provinces/districts that are still missing |
+| 7 | Setup and tests (GitHub login, Telegram message, chat id) |
+| 8 | **District assignment report** (read-only; writes `ilce_rapor.txt`) |
+| 9 | **Rebuild district guides** with true district assignment (preview first, asks before upload) |
+| 0 | Exit |
+
+The menu returns after every action, so you can run several steps in a row.
+
+## 🧭 True district assignment
+
+Google Maps results are searched in circles, so a district guide can also pick up places that really belong to the neighbouring district. Local Radar fixes this by assigning every place to its real province and district from its **coordinates**, using official-style administrative boundary polygons (`ilce_ata.py`, boundaries from geoBoundaries).
+
+- Places within 250 m of a border go to the nearest district; places more than 1 km outside every district (foreign or bad coordinates) are quarantined and left out.
+- Province "All Districts" guides and "What to eat?" pages use the real province/district.
+- Menu **8** only reports; menu **9** rebuilds the district guides into `output/duzeltilmis` for review and uploads them only after you answer `e`.
+- Guides that would end up with fewer than 20 places are left untouched.
+- If the place found for a district name lies outside that district's border, the scan centre is taken from the border instead.
+
+## ⚙️ Personal settings (`ayarlar.json`)
+
+Your own settings live in `ayarlar.json` (not committed). Copy `ayarlar.ornek.json` to `ayarlar.json` and edit: GitHub repo, site address, Analytics code, default province, stop time, parallel windows, `gercek_ilce_ata` (true district assignment, default on) and `tekrar_onleme_gun` (days to skip already-scanned cells; use `0` to force a rescan, then set it back to `60`).
+
+Raw per-district scan files are kept in the `tarama_json/` folder to keep the main folder tidy.
 
 **Tips**
 
@@ -166,7 +188,9 @@ Wait 5 to 20 minutes depending on the area.
 local-radar/
 ├── local_radar_core.py      Core engine (scraper, categorizer, exporters)
 ├── local_radar_gui.py       Tkinter GUI (TR/EN)
-├── gece_tarama.py           Night Scan batch runner
+├── gece_tarama.py           Night Scan batch runner and menu
+├── ilce_ata.py              True district assignment from boundary polygons
+├── ayarlar.ornek.json       Settings template (copy to ayarlar.json)
 ├── gece_ilceler.txt         Night Scan district list
 ├── test_local_radar.py      Basic test suite
 ├── requirements.txt         Python dependencies
@@ -251,6 +275,7 @@ MIT License — see the [LICENSE](LICENSE) file for details.
 - **Playwright** — browser automation
 - **OpenStreetMap / Nominatim / Overpass** — map data
 - **Leaflet** — interactive maps
+- **geoBoundaries** (William & Mary geoLab) — district boundary polygons, licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
 - **Openpyxl** — Excel output
 
 Made with ❤️ for travelers and foodies.
