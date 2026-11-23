@@ -246,6 +246,15 @@ def ilceleri_oku():
         if not s:
             continue
         km = None
+        konum = None
+        if "@" in s:                      # ör. Konya/Yunak:8@38.8167,31.7333  -> merkezi elle ver
+            s, konum_yazi = s.rsplit("@", 1)
+            s = s.strip()
+            try:
+                _p = [x for x in re.split(r"[,; ]+", konum_yazi.strip()) if x]
+                konum = (float(_p[0].replace(",", ".")), float(_p[1].replace(",", ".")))
+            except (ValueError, IndexError):
+                konum = None
         if ":" in s:                      # ör. Hatay/Erzin:8  -> yarıçapı 8 km yap
             s, km_yazi = s.rsplit(":", 1)
             s = s.strip()
@@ -258,6 +267,8 @@ def ilceleri_oku():
         else:
             il, ilce = VARSAYILAN_IL, s
         sonuc.append((il, ilce, km))
+        if konum:
+            KONUM[(il, ilce)] = konum
     sayac = {}
     for il, ilce, _km in sonuc:
         sayac.setdefault(_temiz(ilce), set()).add(il)
@@ -266,6 +277,7 @@ def ilceleri_oku():
     return sonuc
 
 
+KONUM = {}       # listede elle verilen merkezler: (il, ilçe) -> (enlem, boylam)
 CAKISAN = set()   # listede birden fazla ilde geçen ilçe adları (ör. Merkez, Yenişehir)
 
 
@@ -957,6 +969,9 @@ def eksik_illeri_listele():
 
 # ---------- tarama ----------
 def alan_hesapla(il, ilce, km=None):
+    if (il, ilce) in KONUM:
+        e, b = KONUM[(il, ilce)]
+        return e, b, (km or MIN_YARICAP_KM)
     if g.fold(ilce) in g.BILINEN_YERLER:
         e, b, r = g.BILINEN_YERLER[g.fold(ilce)]
         return e, b, (km or r)

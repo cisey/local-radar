@@ -1333,7 +1333,7 @@ list.addEventListener('click',e=>{
 });
 (function(){
   const r=document.querySelector('button.reset');if(!r)return;
-  const w=document.createElement('div');w.style.cssText='display:flex;justify-content:flex-end;gap:14px';
+  const w=document.createElement('div');w.style.cssText='display:flex;justify-content:center;flex-wrap:wrap;gap:8px';
   const b=document.createElement('button');b.className='reset';b.textContent='🔗 Bu görünümü paylaş';
   b.onclick=()=>{
     hashYaz();const u=location.href;
@@ -1790,6 +1790,10 @@ def _zincir_mi(ad):
 
 
 def populer_sayfa(h, dosya_adi, ad=None, ust=None):
+    return tema_ekle(_populer_sayfa_ham(h, dosya_adi, ad, ust))
+
+
+def _populer_sayfa_ham(h, dosya_adi, ad=None, ust=None):
     """'Tüm İlçeler' rehber HTML'sinden 'Neler yenir?' sayfası üretir. Yeni tarama gerekmez. HTML metni ya da None döner."""
     import html as _h
     i = h.find("const V=")
@@ -2062,6 +2066,83 @@ def kaynak_notu_ekle(h):
                      "Harita: © OpenStreetMap · İlçe sınırları: geoBoundaries (CC BY 4.0)</p>")
 
 
+TEMA_ISARET = "temaPaketi"
+TEMA_KOYU_ESKI = "const koyu=!!(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);"
+TEMA_KOYU_YENI = ("const koyu=(document.documentElement.dataset.tema?document.documentElement.dataset.tema==='dark'"
+                  ":!!(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches));")
+TEMA_ORTAK_CSS = (
+    ".tema-btn{font:inherit;font-size:13px;font-weight:600;padding:6px 12px;border-radius:999px;"
+    "border:1px solid var(--line);background:var(--card);color:var(--text);cursor:pointer;margin:0 0 6px 8px;vertical-align:middle}"
+    ".tema-btn:hover{border-color:var(--muted)}"
+    "html[data-tema=\"light\"] #map .leaflet-tile-pane{filter:none!important}"
+    "html[data-tema=\"light\"] #map{background:#f3f4f6}"
+    "html[data-tema=\"light\"] #map .leaflet-bar a{background:#fff;color:#111827}"
+    "html[data-tema=\"dark\"] #map{background:#0f172a}"
+    "html[data-tema=\"dark\"] #map .leaflet-bar a{background:#1e293b;color:#e2e8f0}")
+TEMA_REHBER_CSS = (
+    "html[data-tema=\"light\"]{--bg:#f3f4f6;--card:#ffffff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;"
+    "--accent:#2563eb;--accent-soft:rgba(37,99,235,.08);--gold:#d97706;color-scheme:light}"
+    "html[data-tema=\"dark\"]{--bg:#0f172a;--card:#1e293b;--text:#f8fafc;--muted:#94a3b8;--line:#334155;"
+    "--accent:#3b82f6;--accent-soft:rgba(59,130,246,.15);--gold:#fbbf24;color-scheme:dark}")
+TEMA_POPULER_CSS = (
+    "html[data-tema=\"light\"]{--bg:#fff8ef;--card:#fff;--text:#2b1d12;--muted:#7a6a5c;--line:#f0e1cf;"
+    "--accent:#c2410c;--bar:#fdba74;color-scheme:light}"
+    "html[data-tema=\"dark\"]{--bg:#1a120c;--card:#261a12;--text:#f6eadc;--muted:#b9a592;--line:#3a2a1e;"
+    "--accent:#fb923c;--bar:#9a4a16;color-scheme:dark}")
+TEMA_HEAD_JS = ("<script>/*temaPaketi*/try{var _t=localStorage.getItem('tema');"
+                "if(_t==='dark'||_t==='light')document.documentElement.dataset.tema=_t;}catch(e){}</script>")
+TEMA_BODY_JS = r"""<script>/*temaPaketi*/
+(function(){
+  var d=document.documentElement;
+  function efektif(){var t=d.dataset.tema;if(t)return t;return (window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}
+  var hedef=document.querySelector('a.back');
+  if(!hedef){var g=document.querySelectorAll('header a.geri');hedef=g[g.length-1];}
+  if(!hedef)return;
+  var b=document.createElement('button');b.type='button';b.className='tema-btn';
+  function yaz(){var k=efektif()==='dark';b.textContent=k?'☀️ Açık':'🌙 Koyu';
+    b.setAttribute('aria-label',k?'Açık temaya geç':'Koyu temaya geç');}
+  b.onclick=function(){var y=efektif()==='dark'?'light':'dark';d.dataset.tema=y;
+    try{localStorage.setItem('tema',y);}catch(e){}yaz();};
+  hedef.insertAdjacentElement('afterend',b);yaz();
+})();
+</script>
+"""
+
+
+def tema_ekle(h):
+    """Rehber ve 'Neler yenir?' sayfalarına koyu/açık tema düğmesi ekler (seçim tarayıcıda hatırlanır).
+    Seçim yapılmamışsa cihazın temasına uyulur. Tekrar çalıştırılabilir."""
+    if TEMA_ISARET in h:                       # eski sürümde eklenmişse yalnızca kayıt anahtarını yeni adla eşitle
+        return h.replace("lr_tema", "tema")
+    if "</head>" not in h or "</body>" not in h:
+        return h
+    if "--accent-soft" in h:
+        palet = TEMA_REHBER_CSS
+    elif "--bar:" in h:
+        palet = TEMA_POPULER_CSS
+    else:
+        return h
+    h = h.replace(TEMA_KOYU_ESKI, TEMA_KOYU_YENI)
+    k = h.index("</head>")
+    h = h[:k] + "<style>/*temaPaketi*/" + palet + TEMA_ORTAK_CSS + "</style>" + TEMA_HEAD_JS + h[k:]
+    k = h.rfind("</body>")
+    return h[:k] + TEMA_BODY_JS + h[k:]
+
+
+BUTON_ISARET = "butonStil"
+BUTON_CSS = ("<style>/*butonStil*/.reset{background:var(--card);border:1px solid var(--line);border-radius:99px;"
+             "padding:7px 13px;font-size:12.5px;color:var(--muted)}"
+             ".reset:hover{border-color:var(--muted);color:var(--text)}</style>")
+
+
+def buton_stil_ekle(h):
+    """Ne yesem? / WhatsApp / paylaş / Sıfırla düğmelerini düzgün kapsül düğme yapar. Tekrar çalıştırılabilir."""
+    h = h.replace("justify-content:center;gap:14px", "justify-content:center;flex-wrap:wrap;gap:8px")
+    if BUTON_ISARET in h or "</head>" not in h:
+        return h
+    return h.replace("</head>", BUTON_CSS + "</head>", 1)
+
+
 def sayfa_iyilestir(h):
     """Rehber sayfasına bütün iyileştirmeleri uygular (hepsi tekrar çalıştırılabilir)."""
     h = en_iyi_ekle(h)
@@ -2081,11 +2162,13 @@ def sayfa_iyilestir(h):
     h = populer_link_ekle(h)
     h = en_iyi_min_yorum(h)
     h = kaynak_notu_ekle(h)
+    h = tema_ekle(h)
     h = harita_ek(h)
     h = harita_normal(h)
     h = tum_en_iyi_kaldir(h)
     h = populer_link_yenile(h)
     h = populer_link_ilce(h)
+    h = buton_stil_ekle(h)
     return tekrar_temizle(h)
 
 
